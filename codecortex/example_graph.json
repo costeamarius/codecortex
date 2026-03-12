@@ -1,0 +1,9 @@
+{
+    "nodes": [
+      {"id": "image_moderation", "type": "feature"},
+      {"id": "delete_user", "type": "feature"}
+    ],
+    "edges": [
+      {"from": "image_moderation", "to": "delete_user", "type": "depends_on"}
+    ]
+  }
