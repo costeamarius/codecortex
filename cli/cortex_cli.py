@@ -10,6 +10,8 @@ from codecortex.feature_graph import (
     upsert_feature,
 )
 from codecortex.graph_builder import build_graph, save_graph, update_graph
+from codecortex.graph_context import compute_file_context
+from codecortex.graph_status import compute_graph_status
 from codecortex.project_context import (
     get_changed_python_files,
     get_head_commit,
@@ -189,6 +191,36 @@ def update(path: str = typer.Argument(".")):
 
 
 @app.command()
+def status(path: str = typer.Argument(".")):
+    paths = _cortex_paths(path)
+    status_data = compute_graph_status(
+        repo_path=path,
+        graph_path=paths["graph"],
+        meta_path=paths["meta"],
+    )
+
+    if not status_data["graph_present"]:
+        print("No repository graph found.")
+        print("Run: cortex scan")
+        raise typer.Exit(code=1)
+
+    print("CodeCortex status")
+    print("")
+    print("Graph: present")
+    print(f"Nodes: {status_data['nodes_count']}")
+    print(f"Edges: {status_data['edges_count']}")
+    print(f"Files: {status_data['files_count']}")
+    print(f"Modules: {status_data['modules_count']}")
+    if status_data.get("last_scan_at"):
+        print(f"Last scan at: {status_data['last_scan_at']}")
+
+    print("")
+    print(f"Last scan commit: {status_data.get('last_scan_commit') or 'unknown'}")
+    print(f"Current commit:   {status_data.get('current_commit') or 'unknown'}")
+    print(f"Status: {status_data['sync_status']}")
+
+
+@app.command()
 def query(
     term: str = typer.Argument(...),
     path: str = typer.Option(".", "--path"),
@@ -231,6 +263,30 @@ def query(
             "git_commit": graph.get("git_commit"),
         },
     }
+    print(json.dumps(payload, indent=2))
+
+
+@app.command()
+def context(
+    file: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+):
+    paths = _cortex_paths(path)
+    payload = compute_file_context(
+        repo_path=path,
+        graph_path=paths["graph"],
+        file_path=file,
+    )
+
+    if not payload.get("graph_present"):
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+
+    if not payload.get("file_found"):
+        print(f"File '{payload.get('file')}' is not present in the current graph.")
+        print("Run `cortex scan` or `cortex update` and try again.")
+        raise typer.Exit(code=1)
+
     print(json.dumps(payload, indent=2))
 
 

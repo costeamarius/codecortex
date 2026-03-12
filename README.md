@@ -97,7 +97,9 @@ From your repository root:
 ```bash
 cortex init .
 cortex scan .
+cortex status
 cortex query codecortex --type module
+cortex context codecortex/graph_builder.py
 ```
 
 You should now have a local `.codecortex/` folder with project memory artifacts.
@@ -128,12 +130,28 @@ python -m cli.cortex_cli update .
 cortex update .
 ```
 
+Inspect graph health and sync with current git commit:
+
+```bash
+python -m cli.cortex_cli status .
+# or
+cortex status .
+```
+
 Query graph nodes and relations:
 
 ```bash
 python -m cli.cortex_cli query moderation --type module
 # or
 cortex query moderation --type module
+```
+
+Return dependency context for a specific file:
+
+```bash
+python -m cli.cortex_cli context codecortex/graph_builder.py
+# or
+cortex context codecortex/graph_builder.py
 ```
 
 Persist short architecture decisions:
@@ -194,13 +212,25 @@ python -m cli.cortex_cli update .
 python -m cli.cortex_cli query <term> --type module
 ```
 
-5. Store reusable, short architecture decisions:
+5. Check repository graph freshness before running AI-heavy tasks:
+
+```bash
+python -m cli.cortex_cli status .
+```
+
+6. Retrieve per-file dependency context for targeted edits:
+
+```bash
+python -m cli.cortex_cli context <file_path.py>
+```
+
+7. Store reusable, short architecture decisions:
 
 ```bash
 python -m cli.cortex_cli remember "<title>" "<summary>"
 ```
 
-6. When working on a specific feature, build or refresh only that feature slice:
+8. When working on a specific feature, build or refresh only that feature slice:
 
 ```bash
 python -m cli.cortex_cli feature build <feature_name> --seed "<keywords>" --max-files 200
@@ -228,9 +258,11 @@ After `init` and `scan`, CodeCortex stores:
 - `cortex: command not found`
   - Ensure your virtual environment is active and rerun `pip install -e .`.
 - `Graph not found. Run 'cortex scan' first.`
-  - Run `cortex scan .` before `query` or `feature` commands.
+  - Run `cortex scan .` before `status`, `query`, `context`, or `feature` commands.
 - `update` falls back to full scan
   - Ensure the target folder is a git repository and `git` is installed.
+- `File '<path>' is not present in the current graph.`
+  - Run `cortex update .` (or `cortex scan .`) and retry `cortex context <path>`.
 
 ## License
 
