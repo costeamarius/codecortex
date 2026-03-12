@@ -2,4 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .env
-.codecortex/cache
+.codecortex/
+*.egg-info/
+build/
+dist/

@@ -29,12 +29,31 @@ Stored in:
 Example files:
 
 graph.json  
-features.yaml  
-constraints.yaml
+meta.json  
+features.json  
+constraints.json  
+decisions.jsonl
+
+`graph.json` schema (v1.1) includes:
+- `schema_version`
+- `generated_at`
+- `git_commit`
+- `nodes` (`file`, `module`)
+- `edges` (`imports`) with provenance (`line`, `import_kind`, `relative_level`)
 
 ### Incremental Updates
 
-CodeCortex monitors git changes and updates only the affected nodes in the graph.
+CodeCortex reads git changes since the last scan commit and updates only affected nodes/edges.
+
+CLI commands:
+- `cortex init`
+- `cortex scan`
+- `cortex update`
+- `cortex query`
+- `cortex remember`
+- `cortex feature build`
+- `cortex feature show`
+- `cortex feature refresh`
 
 ## Goal
 

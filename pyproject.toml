@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codecortex"
+version = "0.1.0"
+description = "Persistent repository knowledge graph for AI coding agents."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+  { name = "CodeCortex Contributors" }
+]
+dependencies = [
+  "networkx==3.6.1",
+  "pydantic==2.12.5",
+  "typer==0.24.1",
+]
+
+[project.scripts]
+cortex = "cli.cortex_cli:run"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["codecortex*", "cli*"]

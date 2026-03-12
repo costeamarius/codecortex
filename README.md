@@ -42,7 +42,7 @@ Instead of rescanning the project, AI agents query the graph.
 
 repo  
 ↓  
-codecortex scan  
+cortex scan  
 ↓  
 build project graph  
 ↓  
@@ -60,6 +60,177 @@ AI agents query relevant graph slices
 ## Status
 
 Experimental prototype.
+
+## Installation
+
+### Prerequisites
+
+- Python 3.9 or newer
+- `pip`
+- `git` (recommended for incremental updates via `cortex update`)
+
+### Install
+
+Create and activate a virtual environment (recommended):
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+Install as a local CLI tool:
+
+```bash
+pip install -e .
+```
+
+Then use:
+
+```bash
+cortex --help
+```
+
+## Quickstart (2 minutes)
+
+From your repository root:
+
+```bash
+cortex init .
+cortex scan .
+cortex query codecortex --type module
+```
+
+You should now have a local `.codecortex/` folder with project memory artifacts.
+
+## CLI (MVP)
+
+Initialize repository storage:
+
+```bash
+python -m cli.cortex_cli init .
+# or
+cortex init .
+```
+
+Build full graph:
+
+```bash
+python -m cli.cortex_cli scan .
+# or
+cortex scan .
+```
+
+Incremental refresh from last scanned commit:
+
+```bash
+python -m cli.cortex_cli update .
+# or
+cortex update .
+```
+
+Query graph nodes and relations:
+
+```bash
+python -m cli.cortex_cli query moderation --type module
+# or
+cortex query moderation --type module
+```
+
+Persist short architecture decisions:
+
+```bash
+python -m cli.cortex_cli remember "Image Moderation Flow" "Moderation depends on delete-user cleanup and GDPR export."
+# or
+cortex remember "Image Moderation Flow" "Moderation depends on delete-user cleanup and GDPR export."
+```
+
+Build a feature-specific graph slice on demand:
+
+```bash
+python -m cli.cortex_cli feature build image_moderation --seed "moderation,images,delete_user,gdpr" --max-files 200
+# or
+cortex feature build image_moderation --seed "moderation,images,delete_user,gdpr" --max-files 200
+```
+
+Inspect a stored feature slice:
+
+```bash
+python -m cli.cortex_cli feature show image_moderation
+# or
+cortex feature show image_moderation
+```
+
+Refresh an existing feature slice after code changes:
+
+```bash
+python -m cli.cortex_cli feature refresh image_moderation
+# or
+cortex feature refresh image_moderation
+```
+
+## Recommended Workflow
+
+1. In each repository, initialize CodeCortex once:
+
+```bash
+python -m cli.cortex_cli init .
+```
+
+2. Run a full scan when onboarding the project:
+
+```bash
+python -m cli.cortex_cli scan .
+```
+
+3. During day-to-day development, run incremental updates:
+
+```bash
+python -m cli.cortex_cli update .
+```
+
+4. Let AI agents query `.codecortex/graph.json` instead of rescanning the whole codebase:
+
+```bash
+python -m cli.cortex_cli query <term> --type module
+```
+
+5. Store reusable, short architecture decisions:
+
+```bash
+python -m cli.cortex_cli remember "<title>" "<summary>"
+```
+
+6. When working on a specific feature, build or refresh only that feature slice:
+
+```bash
+python -m cli.cortex_cli feature build <feature_name> --seed "<keywords>" --max-files 200
+python -m cli.cortex_cli feature refresh <feature_name>
+python -m cli.cortex_cli feature show <feature_name>
+```
+
+## Output Files (`.codecortex/`)
+
+After `init` and `scan`, CodeCortex stores:
+
+- `.codecortex/graph.json`: graph nodes/edges and scan metadata
+- `.codecortex/meta.json`: repository identity + last scan info
+- `.codecortex/features.json`: stored feature slices
+- `.codecortex/constraints.json`: default architectural constraints
+- `.codecortex/decisions.jsonl`: newline-delimited architecture decisions
+
+## Git Policy
+
+- `.codecortex/` is local repository memory and is ignored by default.
+- Recommended: run `python -m cli.cortex_cli update .` in CI (or hooks) so agent context stays fresh.
+
+## Troubleshooting
+
+- `cortex: command not found`
+  - Ensure your virtual environment is active and rerun `pip install -e .`.
+- `Graph not found. Run 'cortex scan' first.`
+  - Run `cortex scan .` before `query` or `feature` commands.
+- `update` falls back to full scan
+  - Ensure the target folder is a git repository and `git` is installed.
 
 ## License
 
