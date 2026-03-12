@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 import typer
+from codecortex.agent_instructions import write_agents_md
 from codecortex.feature_graph import (
     build_feature_entry,
     get_feature,
@@ -124,6 +125,21 @@ def init(path: str = typer.Argument(".")):
     print(f"Initialized CodeCortex at {paths['dir']}")
     if gitignore_updated:
         print("Added `.codecortex/` to .gitignore")
+
+
+@app.command("init-agent")
+def init_agent(
+    path: str = typer.Argument("."),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing AGENTS.md."),
+):
+    result = write_agents_md(path, force=force)
+    if not result["created"]:
+        print(f"AGENTS.md already exists at {result['path']}")
+        print("Use `cortex init-agent --force` to overwrite it.")
+        raise typer.Exit(code=1)
+
+    print(f"Created AGENTS.md at {result['path']}")
+    print("Repository AI agents can now be instructed to use CodeCortex.")
 
 
 @app.command()
