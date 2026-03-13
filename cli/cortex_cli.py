@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 from codecortex.agent_instructions import write_agents_md
+from codecortex.benchmarking import benchmark_impact, benchmark_query, benchmark_symbol
 from codecortex.feature_graph import (
     build_feature_entry,
     get_feature,
@@ -12,6 +13,7 @@ from codecortex.feature_graph import (
 )
 from codecortex.graph_builder import build_graph, save_graph, update_graph
 from codecortex.graph_context import compute_file_context
+from codecortex.graph_query import impact_subgraph, search_graph, symbol_subgraph
 from codecortex.graph_status import compute_graph_status
 from codecortex.project_context import (
     get_changed_python_files,
@@ -21,9 +23,20 @@ from codecortex.project_context import (
     utc_now_iso,
     write_json,
 )
+from codecortex.semantics_store import (
+    append_jsonl,
+    get_assertions,
+    merge_graph_with_semantics,
+    normalize_semantics_store,
+    read_jsonl,
+    rebuild_semantics_store_from_events,
+    upsert_assertion,
+)
 
 app = typer.Typer(no_args_is_help=True)
 feature_app = typer.Typer(no_args_is_help=True)
+benchmark_app = typer.Typer(no_args_is_help=True)
+semantics_app = typer.Typer(no_args_is_help=True)
 DEFAULT_CONSTRAINTS = [
     (
         "Keep CodeCortex-generated project memory artifacts under .codecortex/ "
@@ -40,6 +53,8 @@ def _cortex_paths(repo_path):
         "graph": os.path.join(cortex_dir, "graph.json"),
         "meta": os.path.join(cortex_dir, "meta.json"),
         "features": os.path.join(cortex_dir, "features.json"),
+        "semantics": os.path.join(cortex_dir, "semantics.json"),
+        "semantics_journal": os.path.join(cortex_dir, "semantics.journal.jsonl"),
         "constraints": os.path.join(cortex_dir, "constraints.json"),
         "decisions": os.path.join(cortex_dir, "decisions.jsonl"),
     }
@@ -67,6 +82,18 @@ def _load_meta_or_default(repo_path):
 def _load_features_store(repo_path):
     paths = _cortex_paths(repo_path)
     return normalize_features_store(read_json(paths["features"]))
+
+
+def _load_semantics_store(repo_path):
+    paths = _cortex_paths(repo_path)
+    store = normalize_semantics_store(read_json(paths["semantics"]))
+    events = read_jsonl(paths["semantics_journal"])
+    if not events:
+        return store
+    rebuilt_store = rebuild_semantics_store_from_events(events)
+    if rebuilt_store.get("assertions") != store.get("assertions"):
+        write_json(paths["semantics"], rebuilt_store)
+    return rebuilt_store
 
 
 def _ensure_gitignore_entry(repo_path: str, entry: str) -> bool:
@@ -109,6 +136,7 @@ def init(path: str = typer.Argument(".")):
 
     for file_path, empty_payload in (
         (paths["features"], {"schema_version": "1.1", "features": []}),
+        (paths["semantics"], {"schema_version": "1.0", "assertions": []}),
         (
             paths["constraints"],
             {"schema_version": "1.0", "constraints": DEFAULT_CONSTRAINTS},
@@ -119,6 +147,9 @@ def init(path: str = typer.Argument(".")):
 
     if not os.path.exists(paths["decisions"]):
         with open(paths["decisions"], "w", encoding="utf-8"):
+            pass
+    if not os.path.exists(paths["semantics_journal"]):
+        with open(paths["semantics_journal"], "w", encoding="utf-8"):
             pass
 
     gitignore_updated = _ensure_gitignore_entry(path, ".codecortex/")
@@ -227,6 +258,9 @@ def status(path: str = typer.Argument(".")):
     print(f"Edges: {status_data['edges_count']}")
     print(f"Files: {status_data['files_count']}")
     print(f"Modules: {status_data['modules_count']}")
+    print(f"Classes: {status_data['classes_count']}")
+    print(f"Functions: {status_data['functions_count']}")
+    print(f"Methods: {status_data['methods_count']}")
     if status_data.get("last_scan_at"):
         print(f"Last scan at: {status_data['last_scan_at']}")
 
@@ -241,43 +275,27 @@ def query(
     term: str = typer.Argument(...),
     path: str = typer.Option(".", "--path"),
     node_type: Optional[str] = typer.Option(None, "--type"),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(10, "--limit", min=1),
 ):
     graph_path = _cortex_paths(path)["graph"]
     graph = read_json(graph_path)
     if not graph:
         print("Graph not found. Run `cortex scan` first.")
         raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
 
-    lowered_term = term.lower()
-    matches = []
-    for node in graph.get("nodes", []):
-        if node_type and node.get("type") != node_type:
-            continue
-        searchable_values = [
-            str(node.get("id", "")).lower(),
-            str(node.get("path", "")).lower(),
-            str(node.get("name", "")).lower(),
-        ]
-        if any(lowered_term in value for value in searchable_values):
-            matches.append(node)
-
-    matched_ids = {node["id"] for node in matches}
-    relations = [
-        edge
-        for edge in graph.get("edges", [])
-        if edge["from"] in matched_ids or edge["to"] in matched_ids
-    ]
-
-    payload = {
-        "term": term,
-        "node_type": node_type,
-        "matches": matches,
-        "relations": relations,
-        "graph_metadata": {
-            "schema_version": graph.get("schema_version"),
-            "generated_at": graph.get("generated_at"),
-            "git_commit": graph.get("git_commit"),
-        },
+    payload = search_graph(
+        graph=graph,
+        term=term,
+        node_type=node_type,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
     }
     print(json.dumps(payload, indent=2))
 
@@ -303,6 +321,74 @@ def context(
         print("Run `cortex scan` or `cortex update` and try again.")
         raise typer.Exit(code=1)
 
+    print(json.dumps(payload, indent=2))
+
+
+@app.command()
+def symbol(
+    name: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    depth: int = typer.Option(1, "--depth", min=0),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(25, "--limit", min=1),
+):
+    graph_path = _cortex_paths(path)["graph"]
+    graph = read_json(graph_path)
+    if not graph:
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
+
+    payload = symbol_subgraph(
+        graph=graph,
+        symbol=name,
+        depth=depth,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    if not payload:
+        print(f"Symbol '{name}' not found.")
+        raise typer.Exit(code=1)
+
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
+    }
+    print(json.dumps(payload, indent=2))
+
+
+@app.command()
+def impact(
+    target: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    depth: int = typer.Option(2, "--depth", min=0),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(40, "--limit", min=1),
+):
+    graph_path = _cortex_paths(path)["graph"]
+    graph = read_json(graph_path)
+    if not graph:
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
+
+    payload = impact_subgraph(
+        graph=graph,
+        target=target,
+        depth=depth,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    if not payload:
+        print(f"Target '{target}' not found.")
+        raise typer.Exit(code=1)
+
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
+    }
     print(json.dumps(payload, indent=2))
 
 
@@ -418,6 +504,179 @@ def feature_refresh(
 
 
 app.add_typer(feature_app, name="feature")
+app.add_typer(benchmark_app, name="benchmark")
+app.add_typer(semantics_app, name="semantics")
+
+
+@semantics_app.command("add")
+def semantics_add(
+    assertion_id: str = typer.Argument(..., help="Stable assertion id."),
+    subject: str = typer.Argument(...),
+    predicate: str = typer.Argument(...),
+    object_id: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    source: str = typer.Option("agent_inferred", "--source"),
+    confidence: str = typer.Option("high", "--confidence"),
+    note: Optional[str] = typer.Option(None, "--note"),
+    line: Optional[int] = typer.Option(None, "--line"),
+):
+    paths = _cortex_paths(path)
+    os.makedirs(paths["dir"], exist_ok=True)
+    store = _load_semantics_store(path)
+    assertion = {
+        "id": assertion_id,
+        "subject": subject,
+        "predicate": predicate,
+        "object": object_id,
+        "source": source,
+        "confidence": confidence,
+        "note": note,
+        "line": line,
+        "updated_at": utc_now_iso(),
+        "git_commit": get_head_commit(path),
+    }
+    append_jsonl(
+        paths["semantics_journal"],
+        {
+            "type": "upsert_assertion",
+            "assertion": assertion,
+        },
+    )
+    upsert_assertion(store, assertion)
+    write_json(paths["semantics"], store)
+    print(f"Semantic assertion '{assertion_id}' stored.")
+
+
+@semantics_app.command("show")
+def semantics_show(
+    path: str = typer.Option(".", "--path"),
+    subject: Optional[str] = typer.Option(None, "--subject"),
+    predicate: Optional[str] = typer.Option(None, "--predicate"),
+    object_id: Optional[str] = typer.Option(None, "--object"),
+):
+    store = _load_semantics_store(path)
+    assertions = get_assertions(store, subject=subject, predicate=predicate, object_id=object_id)
+    print(
+        json.dumps(
+            {
+                "schema_version": store.get("schema_version"),
+                "count": len(assertions),
+                "assertions": assertions,
+            },
+            indent=2,
+        )
+    )
+
+
+@semantics_app.command("rebuild")
+def semantics_rebuild(
+    path: str = typer.Option(".", "--path"),
+):
+    paths = _cortex_paths(path)
+    events = read_jsonl(paths["semantics_journal"])
+    store = rebuild_semantics_store_from_events(events)
+    write_json(paths["semantics"], store)
+    print(
+        f"Rebuilt semantics store from journal with {len(store.get('assertions', []))} assertions."
+    )
+
+
+@benchmark_app.command("query")
+def benchmark_query_command(
+    term: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    node_type: Optional[str] = typer.Option(None, "--type"),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(10, "--limit", min=1),
+):
+    graph_path = _cortex_paths(path)["graph"]
+    graph = read_json(graph_path)
+    if not graph:
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
+
+    payload = benchmark_query(
+        graph=graph,
+        term=term,
+        node_type=node_type,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
+    }
+    print(json.dumps(payload, indent=2))
+
+
+@benchmark_app.command("symbol")
+def benchmark_symbol_command(
+    name: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    depth: int = typer.Option(1, "--depth", min=0),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(25, "--limit", min=1),
+):
+    graph_path = _cortex_paths(path)["graph"]
+    graph = read_json(graph_path)
+    if not graph:
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
+
+    payload = benchmark_symbol(
+        graph=graph,
+        symbol=name,
+        depth=depth,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    if not payload:
+        print(f"Symbol '{name}' not found.")
+        raise typer.Exit(code=1)
+
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
+    }
+    print(json.dumps(payload, indent=2))
+
+
+@benchmark_app.command("impact")
+def benchmark_impact_command(
+    target: str = typer.Argument(...),
+    path: str = typer.Option(".", "--path"),
+    depth: int = typer.Option(2, "--depth", min=0),
+    edge_type: Optional[str] = typer.Option(None, "--edge"),
+    limit: int = typer.Option(40, "--limit", min=1),
+):
+    graph_path = _cortex_paths(path)["graph"]
+    graph = read_json(graph_path)
+    if not graph:
+        print("Graph not found. Run `cortex scan` first.")
+        raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
+
+    payload = benchmark_impact(
+        graph=graph,
+        target=target,
+        depth=depth,
+        edge_type=edge_type,
+        limit=limit,
+    )
+    if not payload:
+        print(f"Target '{target}' not found.")
+        raise typer.Exit(code=1)
+
+    payload["graph_metadata"] = {
+        "schema_version": graph.get("schema_version"),
+        "generated_at": graph.get("generated_at"),
+        "git_commit": graph.get("git_commit"),
+    }
+    print(json.dumps(payload, indent=2))
 
 def run():
     app()

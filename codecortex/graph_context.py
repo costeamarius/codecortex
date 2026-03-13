@@ -68,12 +68,38 @@ def compute_file_context(repo_path, graph_path, file_path):
             }
         )
 
+    defined_symbol_ids = sorted(
+        {
+            edge.get("to")
+            for edge in edges
+            if edge.get("from") == file_node_id and edge.get("type") == "defines"
+        }
+    )
+    node_by_id = {node.get("id"): node for node in nodes}
+    symbols_defined = [
+        node_by_id[symbol_id]
+        for symbol_id in defined_symbol_ids
+        if symbol_id in node_by_id
+    ]
+    symbol_id_set = set(defined_symbol_ids)
+    symbol_relations = [
+        edge
+        for edge in edges
+        if edge.get("type") != "imports"
+        and (
+            edge.get("from") in symbol_id_set
+            or edge.get("to") in symbol_id_set
+        )
+    ]
+
     return {
         "graph_present": True,
         "file_found": True,
         "file": normalized_file,
         "imports": imports,
         "imported_by": imported_by,
+        "symbols_defined": symbols_defined,
+        "symbol_relations": symbol_relations,
         "graph_metadata": {
             "schema_version": graph.get("schema_version"),
             "generated_at": graph.get("generated_at"),

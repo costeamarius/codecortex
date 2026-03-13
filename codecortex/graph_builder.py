@@ -1,6 +1,8 @@
 import json
 import os
-from .scanner import scan_python_files, extract_import_records
+
+from .django_semantics import extract_django_semantic_records
+from .scanner import extract_import_records, extract_symbol_records, scan_python_files
 
 
 def _file_node_id(relative_path):
@@ -9,6 +11,10 @@ def _file_node_id(relative_path):
 
 def _module_node_id(module_name):
     return f"module:{module_name}"
+
+
+def _symbol_node_id(symbol_type, qualname):
+    return f"{symbol_type}:{qualname}"
 
 
 def _path_to_module(relative_path):
@@ -83,13 +89,97 @@ def _add_file_and_imports(nodes, edges, repo_path, relative_path, known_modules)
                 record["kind"],
                 record["level"],
                 record["lineno"],
+                None,
+            )
+        )
+
+    symbol_payload = extract_symbol_records(file_path, source_module)
+    for symbol in symbol_payload.get("nodes", []):
+        symbol["path"] = relative_path
+        nodes[symbol["id"]] = symbol
+        parent_id = file_node_id
+        if symbol.get("type") == "method":
+            parent_qualname = ".".join(symbol.get("qualname", "").split(".")[:-1])
+            parent_id = _symbol_node_id("class", parent_qualname)
+
+        edges.add(
+            (
+                parent_id,
+                symbol["id"],
+                "defines",
+                None,
+                None,
+                symbol.get("line"),
+                None,
+            )
+        )
+
+    for relation in symbol_payload.get("edges", []):
+        target_id = relation["to"]
+        if target_id.startswith("symbol:") and target_id not in nodes:
+            nodes[target_id] = {
+                "id": target_id,
+                "type": "symbol",
+                "name": target_id.split(":", 1)[1].split(".")[-1],
+                "qualname": target_id.split(":", 1)[1],
+                "scope": "unresolved",
+            }
+
+        edges.add(
+            (
+                relation["from"],
+                target_id,
+                relation["type"],
+                None,
+                None,
+                relation.get("line"),
+                relation.get("resolution"),
+            )
+        )
+
+
+def _add_django_semantics(nodes, edges, repo_path, relative_path):
+    file_path = os.path.join(repo_path, relative_path)
+    if not os.path.exists(file_path):
+        return
+
+    source_module = _path_to_module(relative_path)
+    semantic_payload = extract_django_semantic_records(
+        file_path=file_path,
+        relative_path=relative_path,
+        module_name=source_module,
+        nodes=nodes,
+    )
+    for node in semantic_payload.get("nodes", []):
+        nodes[node["id"]] = node
+
+    for relation in semantic_payload.get("edges", []):
+        target_id = relation["to"]
+        if target_id.startswith("symbol:") and target_id not in nodes:
+            nodes[target_id] = {
+                "id": target_id,
+                "type": "symbol",
+                "name": target_id.split(":", 1)[1].split(".")[-1],
+                "qualname": target_id.split(":", 1)[1],
+                "scope": "unresolved",
+            }
+
+        edges.add(
+            (
+                relation["from"],
+                target_id,
+                relation["type"],
+                None,
+                None,
+                relation.get("line"),
+                relation.get("resolution"),
             )
         )
 
 
 def _finalize_graph(nodes, edges, generated_at, git_commit):
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "generated_at": generated_at,
         "git_commit": git_commit,
         "nodes": sorted(nodes.values(), key=lambda node: node["id"]),
@@ -101,8 +191,11 @@ def _finalize_graph(nodes, edges, generated_at, git_commit):
                 "import_kind": import_kind,
                 "relative_level": relative_level,
                 "line": line_number,
+                "resolution": resolution,
             }
-            for source, target, edge_type, import_kind, relative_level, line_number in sorted(edges)
+            for source, target, edge_type, import_kind, relative_level, line_number, resolution in sorted(
+                edges
+            )
         ],
     }
 
@@ -119,6 +212,7 @@ def _to_mutable_maps(graph):
                 edge.get("import_kind"),
                 edge.get("relative_level"),
                 edge.get("line"),
+                edge.get("resolution"),
             )
         )
     return nodes, edges
@@ -130,13 +224,33 @@ def _cleanup_graph(nodes, edges):
         edge for edge in edges if edge[0] in valid_node_ids and edge[1] in valid_node_ids
     }
 
-    module_targets = {target for _, target, edge_type, _, _, _ in edges_to_keep if edge_type == "imports"}
+    module_targets = {
+        target for _, target, edge_type, _, _, _, _ in edges_to_keep if edge_type == "imports"
+    }
     orphan_modules = [
         node_id
         for node_id, node in nodes.items()
         if node["type"] == "module" and node_id not in module_targets
     ]
     for orphan_id in orphan_modules:
+        nodes.pop(orphan_id, None)
+
+    valid_node_ids = set(nodes.keys())
+    edges_to_keep = {
+        edge for edge in edges_to_keep if edge[0] in valid_node_ids and edge[1] in valid_node_ids
+    }
+
+    referenced_nodes = {
+        endpoint
+        for edge in edges_to_keep
+        for endpoint in (edge[0], edge[1])
+    }
+    orphan_symbols = [
+        node_id
+        for node_id, node in nodes.items()
+        if node["type"] in {"symbol", "template", "semantic"} and node_id not in referenced_nodes
+    ]
+    for orphan_id in orphan_symbols:
         nodes.pop(orphan_id, None)
 
     valid_node_ids = set(nodes.keys())
@@ -165,6 +279,9 @@ def build_graph(repo_path, generated_at=None, git_commit=None):
     for relative_path in relative_paths:
         _add_file_and_imports(nodes, edges, repo_path, relative_path, known_modules)
 
+    for relative_path in relative_paths:
+        _add_django_semantics(nodes, edges, repo_path, relative_path)
+
     return _finalize_graph(nodes, edges, generated_at, git_commit)
 
 
@@ -181,9 +298,26 @@ def update_graph(existing_graph, repo_path, changed_files, generated_at=None, gi
 
         file_node_id = _file_node_id(relative_path)
         nodes.pop(file_node_id, None)
-        edges = {edge for edge in edges if edge[0] != file_node_id}
+        removed_symbol_ids = {
+            node_id
+            for node_id, node in nodes.items()
+            if node.get("type") in {"class", "function", "method"}
+            and node.get("path", relative_path) == relative_path
+        }
+        for node_id in removed_symbol_ids:
+            nodes.pop(node_id, None)
+
+        edges = {
+            edge
+            for edge in edges
+            if edge[0] != file_node_id
+            and edge[1] != file_node_id
+            and edge[0] not in removed_symbol_ids
+            and edge[1] not in removed_symbol_ids
+        }
 
         _add_file_and_imports(nodes, edges, repo_path, relative_path, known_modules)
+        _add_django_semantics(nodes, edges, repo_path, relative_path)
 
     nodes, edges = _cleanup_graph(nodes, edges)
     return _finalize_graph(nodes, edges, generated_at, git_commit)

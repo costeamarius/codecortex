@@ -13,6 +13,9 @@ def compute_graph_status(repo_path, graph_path, meta_path):
 
     files_count = sum(1 for node in nodes if node.get("type") == "file")
     modules_count = sum(1 for node in nodes if node.get("type") == "module")
+    classes_count = sum(1 for node in nodes if node.get("type") == "class")
+    functions_count = sum(1 for node in nodes if node.get("type") == "function")
+    methods_count = sum(1 for node in nodes if node.get("type") == "method")
 
     meta = read_json(meta_path) or {}
     last_scan_at = meta.get("last_scan_at") or graph.get("generated_at")
@@ -30,6 +33,9 @@ def compute_graph_status(repo_path, graph_path, meta_path):
         "edges_count": len(edges),
         "files_count": files_count,
         "modules_count": modules_count,
+        "classes_count": classes_count,
+        "functions_count": functions_count,
+        "methods_count": methods_count,
         "last_scan_at": last_scan_at,
         "last_scan_commit": last_scan_commit,
         "current_commit": current_commit,

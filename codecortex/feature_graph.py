@@ -39,6 +39,8 @@ def _node_search_values(node):
         str(node.get("id", "")).lower(),
         str(node.get("path", "")).lower(),
         str(node.get("name", "")).lower(),
+        str(node.get("qualname", "")).lower(),
+        str(node.get("module", "")).lower(),
     ]
 
 
