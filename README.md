@@ -1,6 +1,6 @@
 # CodeCortex
 
-CodeCortex is an experimental open-source engine for building a persistent semantic memory layer for software repositories.
+CodeCortex is an experimental open-source engine that turns a software repository into a persistent structural and semantic knowledge graph for AI agents.
 
 AI coding tools repeatedly re-learn the same project structure every session.  
 CodeCortex solves this by combining:
