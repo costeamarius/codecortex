@@ -218,21 +218,21 @@ Target improvements:
 ## Suggested File-Level Work Breakdown
 
 Likely files to modify:
-- [ ] `/Users/mariuscostea/codecortex/codecortex/scanner.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/graph_builder.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/graph_context.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/graph_status.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/feature_graph.py`
-- [ ] `/Users/mariuscostea/codecortex/cli/cortex_cli.py`
-- [ ] `/Users/mariuscostea/codecortex/docs/architecture.md`
+- [ ] `codecortex/codecortex/scanner.py`
+- [ ] `codecortex/codecortex/graph_builder.py`
+- [ ] `codecortex/codecortex/graph_context.py`
+- [ ] `codecortex/codecortex/graph_status.py`
+- [ ] `codecortex/codecortex/feature_graph.py`
+- [ ] `codecortex/cli/cortex_cli.py`
+- [ ] `odecortex/docs/architecture.md`
 
 Likely new files:
-- [ ] `/Users/mariuscostea/codecortex/codecortex/symbols.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/symbol_resolution.py`
-- [ ] `/Users/mariuscostea/codecortex/codecortex/django_semantics.py`
-- [ ] `/Users/mariuscostea/codecortex/tests/test_symbol_graph.py`
-- [ ] `/Users/mariuscostea/codecortex/tests/test_incremental_symbol_update.py`
-- [ ] `/Users/mariuscostea/codecortex/tests/test_django_semantics.py`
+- [ ] `codecortex/codecortex/symbols.py`
+- [ ] `codecortex/codecortex/symbol_resolution.py`
+- [ ] `odecortex/codecortex/django_semantics.py`
+- [ ] `odecortex/tests/test_symbol_graph.py`
+- [ ] `codecortex/tests/test_incremental_symbol_update.py`
+- [ ] `codecortex/tests/test_django_semantics.py`
 
 ## Recommended Implementation Order
 
