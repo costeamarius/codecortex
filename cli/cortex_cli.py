@@ -5,6 +5,8 @@ from typing import Optional
 import typer
 from codecortex.agent_instructions import write_agents_md
 from codecortex.benchmarking import benchmark_impact, benchmark_query, benchmark_symbol
+from codecortex.execution.executor import execute_action
+from codecortex.execution.models import ExecutionAction
 from codecortex.feature_graph import (
     build_feature_entry,
     get_feature,
@@ -118,6 +120,10 @@ def _ensure_gitignore_entry(repo_path: str, entry: str) -> bool:
         f.write(f"{entry}\n")
 
     return True
+
+
+def _print_result(payload: dict):
+    print(json.dumps(payload, indent=2))
 
 
 @app.callback()
@@ -268,6 +274,77 @@ def status(path: str = typer.Argument(".")):
     print(f"Last scan commit: {status_data.get('last_scan_commit') or 'unknown'}")
     print(f"Current commit:   {status_data.get('current_commit') or 'unknown'}")
     print(f"Status: {status_data['sync_status']}")
+
+
+@app.command()
+def capabilities(path: str = typer.Option(".", "--path")):
+    repo_path = os.path.abspath(path)
+    payload = {
+        "codecortex_enabled": os.path.isdir(os.path.join(repo_path, "codecortex")) or os.path.isdir(os.path.join(repo_path, ".codecortex")),
+        "repo": repo_path,
+        "execution": {
+            "cli_commands": ["edit-file", "run-command"],
+            "supported_actions": ["edit_file", "run_command"],
+            "deterministic_execution_v1": True,
+        },
+        "memory": {
+            "cli_commands": [
+                "init", "init-agent", "scan", "update", "status", "query", "context",
+                "symbol", "impact", "remember", "feature", "semantics", "benchmark"
+            ]
+        },
+    }
+    _print_result(payload)
+
+
+@app.command("edit-file")
+def edit_file_command(
+    file: str = typer.Option(..., "--file"),
+    content: str = typer.Option(..., "--content"),
+    path: str = typer.Option(".", "--path"),
+    agent_id: Optional[str] = typer.Option(None, "--agent-id"),
+    environment: Optional[str] = typer.Option(None, "--environment"),
+    validate: bool = typer.Option(True, "--validate/--no-validate"),
+    lock_ttl_seconds: int = typer.Option(30, "--lock-ttl-seconds"),
+):
+    result = execute_action(
+        ExecutionAction(
+            action="edit_file",
+            repo=path,
+            agent_id=agent_id,
+            environment=environment,
+            payload={
+                "file": file,
+                "content": content,
+                "validate": validate,
+                "lock_ttl_seconds": lock_ttl_seconds,
+            },
+        )
+    )
+    _print_result(result.to_dict())
+
+
+@app.command("run-command")
+def run_command_cli(
+    command: str = typer.Option(..., "--command", help="Shell command string executed via `bash -lc` in v1."),
+    path: str = typer.Option(".", "--path"),
+    agent_id: Optional[str] = typer.Option(None, "--agent-id"),
+    environment: Optional[str] = typer.Option(None, "--environment"),
+    timeout_seconds: Optional[int] = typer.Option(None, "--timeout-seconds"),
+):
+    result = execute_action(
+        ExecutionAction(
+            action="run_command",
+            repo=path,
+            agent_id=agent_id,
+            environment=environment,
+            payload={
+                "command": ["bash", "-lc", command],
+                "timeout_seconds": timeout_seconds,
+            },
+        )
+    )
+    _print_result(result.to_dict())
 
 
 @app.command()
@@ -677,6 +754,7 @@ def benchmark_impact_command(
         "git_commit": graph.get("git_commit"),
     }
     print(json.dumps(payload, indent=2))
+
 
 def run():
     app()

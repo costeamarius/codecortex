@@ -1,80 +1,254 @@
 # CodeCortex Architecture
 
-CodeCortex builds a persistent knowledge graph of a repository.
+CodeCortex is a repository memory system for AI agents, extended with a deterministic execution substrate to enable reliable operation in multi-agent and OpenClaw-aligned environments.
 
-## Components
+## Architecture Summary
 
-### Repo Scanner
-Parses the repository using Python AST and extracts structural relationships.
+CodeCortex has two primary layers:
 
-Current extraction layers:
-- file and module discovery
-- import relationships
-- Python symbol discovery (`class`, `function`, `method`)
-- basic semantic relationships (`defines`, `inherits`, `calls`, `decorated_by`)
-- Django semantic plugin for explicit framework relations
+1. **Repository memory layer**
+   - understands repository structure and semantic relationships
+   - persists reusable repository knowledge under `.codecortex/`
+   - provides compact retrieval interfaces for AI agents
 
-### Dependency Graph
-Creates a graph of files, modules, symbols, and relationships.
+2. **Deterministic execution layer**
+   - provides a repo-local path for controlled file and command execution
+   - returns machine-readable results
+   - supports validation, logging, and minimal locking in v1
 
-### Semantic Feature Layer
-Maps code elements to higher level features.
+## Core Principle
 
-Example:
+Repository behavior is **repo-defined**, not **environment-defined**.
 
-image_moderation  
-├ moderation/services.py  
-├ profiles/models.py  
-└ delete_user_images.py
+If a repository is Codecortex-enabled, participating agents should adopt the same repo-local operating model whether they run in:
+- OpenClaw
+- an IDE such as Cursor
+- another supported external agent environment
 
-### Graph Storage
+## High-Level View
 
-Stored in:
+```text
+[ IDE Agent ]      [ OpenClaw Agent ]      [ External Agent ]
+       \                |                /
+        \               |               /
+         -> repo-local CodeCortex CLI <-
+                    |
+        ------------------------------
+        |                            |
+  repository memory           execution substrate
+        |                            |
+   .codecortex/                 repository mutations
+```
 
-.codecortex/
+## Main Components
 
-Example files:
+### 1. Repository Memory
 
-graph.json  
-meta.json  
-features.json  
-constraints.json  
-decisions.jsonl
+The repository-memory layer includes:
+- repository scanning
+- symbol graph generation
+- semantic framework-specific extraction
+- semantic assertion persistence
+- feature-oriented graph slices
+- compact retrieval commands
 
-`graph.json` schema (v1.2) includes:
-- `schema_version`
-- `generated_at`
-- `git_commit`
-- `nodes` (`file`, `module`, `class`, `function`, `method`, unresolved `symbol`)
-- `edges`
-  - `imports`
-  - `defines`
-  - `inherits`
-  - `calls`
-  - `decorated_by`
-  - Django semantic edges such as `is_django_model`, `is_django_form`, `is_django_view`, `binds_model`, `uses_form`, `uses_model`, `uses_template`, `delegates_to`
-- edge provenance:
-  - `line`
-  - `import_kind`
-  - `relative_level`
-  - `resolution`
+Relevant modules include:
+- `codecortex/scanner.py`
+- `codecortex/graph_builder.py`
+- `codecortex/graph_query.py`
+- `codecortex/graph_context.py`
+- `codecortex/graph_status.py`
+- `codecortex/django_semantics.py`
+- `codecortex/semantics_store.py`
+- `codecortex/feature_graph.py`
+- `codecortex/project_context.py`
 
-### Incremental Updates
+### 2. Execution Substrate
 
-CodeCortex reads git changes since the last scan commit and updates only affected nodes/edges.
+The repo-local execution substrate includes:
+- structured action execution
+- safe file editing
+- validation-before-commit
+- append-only operation logging
+- minimal write locking
+- structured command execution
 
-CLI commands:
-- `cortex init`
-- `cortex scan`
-- `cortex update`
-- `cortex query`
-- `cortex symbol`
-- `cortex impact`
-- `cortex remember`
-- `cortex feature build`
-- `cortex feature show`
-- `cortex feature refresh`
+Relevant modules include:
+- `codecortex/execution/executor.py`
+- `codecortex/execution/file_ops.py`
+- `codecortex/execution/validators.py`
+- `codecortex/execution/logger.py`
+- `codecortex/execution/locks.py`
+- `codecortex/execution/command_ops.py`
+- `codecortex/execution/models.py`
+- `codecortex/execution/errors.py`
+
+### 3. OpenClaw and Agent Alignment
+
+Agent-alignment and integration support includes:
+- OpenClaw-alignment helpers
+- participating-agent operating-model helpers
+- repo-local capability exposure
+
+Relevant modules include:
+- `codecortex/openclaw_integration.py`
+- `codecortex/agent_operating_model.py`
+- `cli/cortex_cli.py`
+
+## Repo-Local Runtime Data
+
+CodeCortex persists repository-local runtime data under `.codecortex/`.
+
+Current artifacts may include:
+- `graph.json`
+- `meta.json`
+- `features.json`
+- `semantics.json`
+- `semantics.journal.jsonl`
+- `constraints.json`
+- `decisions.jsonl`
+- `logs/`
+- `locks/`
+- `state.json`
+
+## Execution Flow (v1)
+
+### Safe file edit flow
+
+```text
+Agent decides change
+    ↓
+repo-local CLI (`cortex edit-file`)
+    ↓
+execution executor
+    ↓
+path resolution
+    ↓
+write lock acquire
+    ↓
+validation
+    ↓
+backup
+    ↓
+atomic replace
+    ↓
+logging
+    ↓
+structured result
+```
+
+### Safe command flow
+
+```text
+Agent requests command
+    ↓
+repo-local CLI (`cortex run-command`)
+    ↓
+execution executor
+    ↓
+repo-context subprocess execution
+    ↓
+stdout/stderr capture
+    ↓
+logging
+    ↓
+structured result
+```
+
+## v1 Execution Semantics
+
+### Validation
+
+v1 validators include:
+- JSON parse validation
+- Python compile validation
+- pass-through behavior for file types without a registered validator
+
+### Logging
+
+Operation logs are append-only JSON lines stored under:
+
+```text
+.codecortex/logs/operations.jsonl
+```
+
+### Locking
+
+v1 locking behavior:
+- write locks only
+- one writer per file resource
+- lock files stored under `.codecortex/locks/`
+- owner recorded in lock payload
+- TTL-based expiration
+- expired locks may be replaced on the next acquire attempt
+- no heartbeat in v1
+- no read locks in v1
+
+## CLI Surface
+
+### Memory-oriented commands
+- `init`
+- `init-agent`
+- `scan`
+- `update`
+- `status`
+- `query`
+- `context`
+- `symbol`
+- `impact`
+- `remember`
+- `feature ...`
+- `semantics ...`
+- `benchmark ...`
+
+### Execution-oriented commands
+- `capabilities`
+- `edit-file`
+- `run-command`
+
+## OpenClaw Alignment
+
+OpenClaw is treated as a runner and integration environment.
+
+OpenClaw should:
+- detect Codecortex-enabled repositories
+- query repo-local capabilities
+- use repo-local CLI commands for supported operations
+- consume structured results
+
+OpenClaw should not:
+- embed file mutation logic
+- embed validation logic
+- embed locking logic
+- redefine repository behavior outside the repo-local operating model
+
+## IDE and External Agent Alignment
+
+Participating agents should:
+- use CodeCortex retrieval when available
+- use the same repo-local CLI contract for supported operations
+- avoid bypassing the execution substrate for supported mutations
+- respect the same repo-defined operating rules as OpenClaw
+
+## v1 Scope Boundary
+
+v1 intentionally includes:
+- repository memory
+- deterministic file editing
+- deterministic command execution
+- validation
+- logging
+- minimal write locking
+- OpenClaw-aware integration direction
+
+v1 intentionally does not include:
+- heartbeat-based lock renewal
+- read/write lock separation
+- multi-resource transactions
+- deadlock handling
+- rollback orchestration
+- universal enforcement across arbitrary unintegrated tools
 
 ## Goal
 
-Allow AI agents to query repository structure without rescanning the entire codebase.
+The architecture is designed to let AI agents understand a repository, retain reusable knowledge across sessions, and operate through a single reliable execution path that remains compatible with OpenClaw and future multi-agent workflows.

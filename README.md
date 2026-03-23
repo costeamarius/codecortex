@@ -1,420 +1,592 @@
 # CodeCortex
 
-CodeCortex is an experimental open-source engine that turns a software repository into a persistent structural and semantic knowledge graph for AI agents.
+CodeCortex is a repository memory system for AI agents, extended with a deterministic execution substrate to enable reliable operation in multi-agent and OpenClaw-aligned environments.
 
-AI coding tools repeatedly re-learn the same project structure every session.  
-CodeCortex solves this by combining:
-- a persistent structural and semantic graph extracted from code
-- compact retrieval commands for AI agents
-- a writable semantic memory layer for relationships discovered after analysis
+It helps AI agents understand a repository, retain reusable project knowledge across sessions, and operate through a single reliable execution path.
 
-## Problem
+## Product Definition
 
-AI coding assistants currently work like this:
+CodeCortex has two complementary responsibilities:
 
-prompt → scan code → reason → response
+1. **Repository memory**
+   - build and persist a structural and semantic understanding of the repository
+   - provide compact retrieval commands for AI agents
+   - store reusable semantic assertions and project decisions
 
-When a new session starts, the repository must be analyzed again.  
-This wastes tokens and increases the risk of missing architectural dependencies.
+2. **Deterministic execution substrate**
+   - provide a controlled execution path for repository operations
+   - align agent behavior across IDE and OpenClaw environments
+   - support safe evolution toward multi-agent coordination
 
-Example:
+Repository memory remains the core identity of the project.
+The execution substrate exists to make that memory reliable and usable in real agent workflows.
 
-Feature: image moderation
+## Why CodeCortex Exists
 
-Dependencies:
-- user deletion
-- GDPR export
-- storage cleanup
-- async tasks
+AI coding agents often work like this:
 
-If moderation logic changes, these relationships should be understood automatically.
+```text
+prompt → scan code → reason → respond
+```
 
-## Solution
+When a new session starts, the repository is explored again.
+This wastes tokens, repeats reasoning, and increases the chance of missing important dependencies.
 
-CodeCortex creates a persistent repository memory stored inside the repository.
+CodeCortex addresses this by turning a repository into a persistent local memory system.
+Instead of repeatedly rediscovering structure, relationships, and validated project knowledge, agents can query and reuse what is already known.
 
-The memory layer contains:
+As agent-driven development becomes more capable, repository memory alone is not enough.
+Agents also need a reliable and deterministic way to operate on the repository, especially when multiple tools or agent environments interact with the same project.
 
-- structural dependencies
-- symbol relationships
-- framework-aware semantic relations
-- feature relationships
-- persisted semantic assertions
-- architectural constraints
+That is why CodeCortex is evolving beyond repository understanding into a repository-aligned execution model.
 
-Instead of rescanning the project and re-deriving the same relationships every session, AI agents query and extend this memory layer.
+## Current Direction
 
-## Architecture
+CodeCortex is evolving toward the following architecture:
 
-repo  
-↓  
-cortex scan  
-↓  
-build project graph  
-↓  
-store graph in `.codecortex/`  
-↓  
-AI agents query relevant graph slices
+- **Codecortex core** understands repository structure and semantic relationships
+- **Execution layer** enforces a deterministic operational path
+- **AI agents** decide what should happen
+- **OpenClaw and IDE environments** invoke the same repo-local interface
 
-## Goals
+Design principles:
 
-- persistent repository knowledge
-- semantic feature mapping
-- incremental graph updates from git diffs
-- efficient AI context retrieval
-- persistent semantic assertions that prevent repeated reasoning
+- repository-local architecture
+- single execution path
+- clear separation between reasoning and execution
+- deterministic behavior over implicit agent behavior
+- extensibility toward coordinated multi-agent workflows
 
 ## Status
 
-Experimental prototype.
+**Current status:** experimental project under active architectural transition.
 
-## Installation
+What exists today:
+- repository scanning and graph building
+- repository-local memory under `.codecortex/`
+- retrieval-oriented CLI commands
+- semantic assertion storage
+- feature-oriented graph slices
+- benchmark utilities
+- minimal repo-local execution layer (v1)
+- deterministic file operation path
+- validation before mutation
+- structured operation logging
+- minimal write locking
+- deterministic command execution path
+- OpenClaw-aligned execution workflow
+- test coverage for both graph/query behavior and execution v1
 
-### Prerequisites
+What evolves next:
+- stronger CLI ergonomics
+- broader user-facing examples and integration polish
+- improved coordination beyond v1 minimal locking
 
-- Python 3.9 or newer
-- `pip`
-- `git` (recommended for incremental updates via `cortex update`)
+## Core Concepts
 
-### Install
+### 1. Repository Memory
 
-Create and activate a virtual environment (recommended):
+CodeCortex persists repository knowledge inside the project itself.
 
-```bash
-python -m venv venv
-source venv/bin/activate
+This memory layer is designed to store:
+- structural dependencies
+- symbol relationships
+- semantic framework-specific relations
+- feature-level slices
+- reusable project decisions
+- persistent semantic assertions
+
+The goal is to reduce repeated exploration and repeated reasoning cost for AI agents.
+
+### 2. Deterministic Execution Substrate
+
+CodeCortex is also evolving a repo-local execution substrate.
+
+This layer is intended to:
+- enforce a single path for repository mutations
+- prevent ad-hoc direct file changes by participating agents
+- support safe file operations and validation
+- provide a clean integration point for OpenClaw and IDE agents
+- prepare for future multi-agent coordination
+
+This is not intended to replace AI reasoning.
+It exists to make execution predictable, debuggable, and reliable.
+
+## Architecture Overview
+
+```text
+[ IDE Agent ]      [ OpenClaw Agent ]
+       \              /
+        \            /
+         -> repo-local CLI -> CodeCortex
+                              ├─ repository memory
+                              └─ execution substrate
+                                   ↓
+                                repository
 ```
 
-Install as a local CLI tool:
+## Repository Layout
 
-```bash
-pip install -e .
+Current repository structure includes:
+
+```text
+codecortex/
+  cli/
+  codecortex/
+  docs/
+  tests/
 ```
 
-Then use:
+Target runtime structure inside a project repository:
 
-```bash
-cortex --help
+```text
+repo/
+  codecortex/
+    core/
+    execution/
+    cli.py
+  .codecortex/
+    graph.json
+    meta.json
+    semantics.json
+    semantics.journal.jsonl
+    features.json
+    constraints.json
+    decisions.jsonl
+    logs/
+    locks/
 ```
 
-## Quickstart (2 minutes)
-
-From your repository root:
-
-```bash
-cortex init .
-cortex init-agent .
-cortex scan .
-cortex status
-cortex symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
-cortex benchmark impact codecortex/graph_builder.py --depth 2 --limit 16
-cortex semantics show
-```
-
-You should now have a local `.codecortex/` folder with project memory artifacts.
-
-## CLI (MVP)
-
-Initialize repository storage:
-
-```bash
-python -m cli.cortex_cli init .
-# or
-cortex init .
-```
-
-Generate an `AGENTS.md` file for repository AI agent instructions:
-
-```bash
-python -m cli.cortex_cli init-agent .
-# or
-cortex init-agent .
-```
-
-Build full graph:
-
-```bash
-python -m cli.cortex_cli scan .
-# or
-cortex scan .
-```
-
-Incremental refresh from last scanned commit:
-
-```bash
-python -m cli.cortex_cli update .
-# or
-cortex update .
-```
-
-Inspect graph health and sync with current git commit:
-
-```bash
-python -m cli.cortex_cli status .
-# or
-cortex status .
-```
-
-Query graph nodes and relations:
-
-```bash
-python -m cli.cortex_cli query moderation --type module
-# or
-cortex query moderation --type module
-```
-
-Return dependency context for a specific file:
-
-```bash
-python -m cli.cortex_cli context codecortex/graph_builder.py
-# or
-cortex context codecortex/graph_builder.py
-```
-
-Persist short architecture decisions:
-
-```bash
-python -m cli.cortex_cli remember "Image Moderation Flow" "Moderation depends on delete-user cleanup and GDPR export."
-# or
-cortex remember "Image Moderation Flow" "Moderation depends on delete-user cleanup and GDPR export."
-```
-
-Retrieve a compact symbol-centered subgraph:
-
-```bash
-python -m cli.cortex_cli symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
-# or
-cortex symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
-```
-
-Retrieve a compact impact subgraph for a file or symbol:
-
-```bash
-python -m cli.cortex_cli impact codecortex/graph_builder.py --depth 2 --limit 16
-# or
-cortex impact codecortex/graph_builder.py --depth 2 --limit 16
-```
-
-Persist semantic assertions discovered by the agent or confirmed by the user:
-
-```bash
-python -m cli.cortex_cli semantics add featured_portfolio.photographer.form \
-  function:fashion.portfolio.views.edit_featured_photographer \
-  uses_form \
-  class:fashion.portfolio.forms.PortfolioFormPhotographer \
-  --source agent_inferred --confidence high
-# or
-cortex semantics add featured_portfolio.photographer.form \
-  function:fashion.portfolio.views.edit_featured_photographer \
-  uses_form \
-  class:fashion.portfolio.forms.PortfolioFormPhotographer \
-  --source agent_inferred --confidence high
-```
-
-Inspect stored semantic assertions:
-
-```bash
-python -m cli.cortex_cli semantics show --predicate uses_form
-# or
-cortex semantics show --predicate uses_form
-```
-
-Rebuild the materialized semantics store from the append-only journal:
-
-```bash
-python -m cli.cortex_cli semantics rebuild
-# or
-cortex semantics rebuild
-```
-
-Build a feature-specific graph slice on demand:
-
-```bash
-python -m cli.cortex_cli feature build image_moderation --seed "moderation,images,delete_user,gdpr" --max-files 200
-# or
-cortex feature build image_moderation --seed "moderation,images,delete_user,gdpr" --max-files 200
-```
-
-Inspect a stored feature slice:
-
-```bash
-python -m cli.cortex_cli feature show image_moderation
-# or
-cortex feature show image_moderation
-```
-
-Refresh an existing feature slice after code changes:
-
-```bash
-python -m cli.cortex_cli feature refresh image_moderation
-# or
-cortex feature refresh image_moderation
-```
-
-Benchmark retrieval payload size for a query:
-
-```bash
-python -m cli.cortex_cli benchmark query graph_builder --type function --limit 5
-# or
-cortex benchmark query graph_builder --type function --limit 5
-```
-
-Benchmark a symbol-centered subgraph:
-
-```bash
-python -m cli.cortex_cli benchmark symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
-# or
-cortex benchmark symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
-```
-
-Benchmark an impact subgraph for a file or symbol:
-
-```bash
-python -m cli.cortex_cli benchmark impact codecortex/graph_builder.py --depth 2 --limit 16
-# or
-cortex benchmark impact codecortex/graph_builder.py --depth 2 --limit 16
-```
-
-## Recommended Workflow
-
-1. In each repository, initialize CodeCortex once:
-
-```bash
-python -m cli.cortex_cli init .
-```
-
-2. Generate repository instructions for AI agents:
-
-```bash
-python -m cli.cortex_cli init-agent .
-```
-
-3. Run a full scan when onboarding the project:
-
-```bash
-python -m cli.cortex_cli scan .
-```
-
-4. During day-to-day development, run incremental updates:
-
-```bash
-python -m cli.cortex_cli update .
-```
-
-5. Let AI agents query CodeCortex retrieval commands instead of rescanning the whole codebase:
-
-```bash
-python -m cli.cortex_cli query <term> --type module
-python -m cli.cortex_cli symbol <qualified_symbol> --depth 1
-python -m cli.cortex_cli impact <file_or_symbol> --depth 2
-```
-
-6. Check repository graph freshness before running AI-heavy tasks:
-
-```bash
-python -m cli.cortex_cli status .
-```
-
-7. Retrieve per-file dependency context for targeted edits:
-
-```bash
-python -m cli.cortex_cli context <file_path.py>
-```
-
-8. Store reusable, short architecture decisions:
-
-```bash
-python -m cli.cortex_cli remember "<title>" "<summary>"
-```
-
-9. Persist reusable semantic assertions once relationships are established:
-
-```bash
-python -m cli.cortex_cli semantics add <assertion_id> <subject> <predicate> <object>
-python -m cli.cortex_cli semantics show
-```
-
-10. When working on a specific feature, build or refresh only that feature slice:
-
-```bash
-python -m cli.cortex_cli feature build <feature_name> --seed "<keywords>" --max-files 200
-python -m cli.cortex_cli feature refresh <feature_name>
-python -m cli.cortex_cli feature show <feature_name>
-```
-
-## Using With AI Agents
-
-Installing CodeCortex is not enough by itself. The AI agent must also be instructed to use the `cortex` CLI.
-
-The recommended setup is:
-
-1. Install CodeCortex in the project environment.
-2. Run `cortex init .`
-3. Run `cortex init-agent .`
-4. Run `cortex scan .`
-5. Start the AI session from the repository root.
-
-`cortex init-agent .` creates an `AGENTS.md` file in the repository root with instructions telling AI agents to:
-
-- run `cortex status .` before manual repository exploration
-- run `cortex scan .` if no graph exists
-- run `cortex update .` if the graph is out of date
-- use `cortex query <term>` for repository-wide discovery
-- use `cortex context <file>` for file-level dependency context
-
-If your AI tool supports `AGENTS.md`, it should load these instructions automatically when started in the repository.
-
-In the current product shape, the highest-value workflow is:
-- extract structure from code with `scan` / `update`
-- retrieve compact subgraphs with `query`, `symbol`, and `impact`
-- persist missing but validated relationships with `semantics add`
-- reuse those persisted relations in later sessions without paying the reasoning cost again
-
-If an `AGENTS.md` file already exists, `cortex init-agent .` will not overwrite it unless you pass `--force`.
-
-## Output Files (`.codecortex/`)
-
-After `init` and `scan`, CodeCortex stores:
-
-- `.codecortex/graph.json`: graph nodes/edges and scan metadata
-- `.codecortex/meta.json`: repository identity + last scan info
-- `.codecortex/semantics.json`: persisted semantic assertions discovered or confirmed after analysis
-- `.codecortex/semantics.journal.jsonl`: append-only event log used to rebuild `semantics.json`
-- `.codecortex/features.json`: stored feature slices
-- `.codecortex/constraints.json`: default architectural constraints
-- `.codecortex/decisions.jsonl`: newline-delimited architecture decisions
-- `AGENTS.md`: repository-level AI instructions generated by `cortex init-agent`
-
-## Git Policy
-
-- `.codecortex/` is local repository memory and is ignored by default.
-- Recommended: run `python -m cli.cortex_cli update .` in CI (or hooks) so agent context stays fresh.
-
-## What It Does Today
+## What CodeCortex Does Today
 
 Today, CodeCortex can:
 
 - parse Python repositories into a persistent graph of files, modules, classes, functions, and methods
 - extract structural relationships such as `imports`, `defines`, `inherits`, `calls`, and `decorated_by`
 - infer Django-specific relations such as `is_django_model`, `is_django_form`, `is_django_view`, `binds_model`, `uses_form`, `uses_model`, `uses_template`, and `delegates_to`
-- return compact subgraphs with `query`, `symbol`, and `impact` for AI-friendly context retrieval
+- return compact subgraphs with `query`, `symbol`, `impact`, and `context`
+- persist semantic assertions in `.codecortex/semantics.json`
+- rebuild semantic state from an append-only journal
+- store feature-specific graph slices
+- store lightweight project decisions
 - benchmark retrieval payload size and approximate token cost
-- persist semantic assertions in `.codecortex/semantics.json` so already-established relationships do not need to be re-derived in later sessions
 
-This means CodeCortex is not just an indexer. It is a repository memory system that can both infer relationships from code and retain higher-level relationships once an agent or user has established them.
+## What Comes Next
+
+Near-term roadmap:
+
+### v2 — improved coordination
+- heartbeat-based lock renewal
+- read/write lock separation
+- better stale-lock handling
+- retry strategies for blocked agents
+- richer capability reporting for external agents and OpenClaw
+- stronger CLI ergonomics for execution commands
+
+### v3 — advanced coordination
+- multi-resource operations
+- rollback strategies
+- operation state tracking
+- conflict detection
+
+### v4 — optional global capabilities
+- selective shared intelligence
+- optional cross-repo coordination
+- stronger centralized governance only if justified
+
+## Installation Modes
+
+CodeCortex setup has two distinct levels:
+
+1. **Environment-level install**
+   - makes the `cortex` CLI available to an agent or runner environment
+   - this is required before CodeCortex can be used anywhere
+
+2. **Repository-level activation**
+   - enables CodeCortex for a specific repository
+   - creates repo-local memory and agent instructions
+   - prepares the repository for CodeCortex-aware operation
+
+These levels are intentionally separate.
+
+Installing CodeCortex in the OpenClaw environment does **not** automatically enable it for every repository.
+Each target repository must be activated explicitly.
+
+## Mode 1 — Install CodeCortex in the agent environment
+
+Use this when you want OpenClaw or another agent environment to have access to the `cortex` CLI.
+
+### Prerequisites
+
+- Python 3.9 or newer
+- `pip`
+- `git` recommended
+
+### Example
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+Install CodeCortex from GitHub:
+
+```bash
+pip install 'git+https://github.com/costeamarius/codecortex.git'
+```
+
+Verify the CLI:
+
+```bash
+cortex --help
+```
+
+At this point, the environment is CodeCortex-capable, but no repository has been activated yet.
+
+## Mode 2 — Activate CodeCortex in a repository
+
+Use this when you want a specific repository to become CodeCortex-enabled.
+
+Change into the target repository:
+
+```bash
+cd <repo>
+```
+
+Initialize repository storage:
+
+```bash
+cortex init .
+```
+
+Generate repository agent instructions:
+
+```bash
+cortex init-agent .
+```
+
+Build the initial graph:
+
+```bash
+cortex scan .
+```
+
+Confirm repository status:
+
+```bash
+cortex status .
+```
+
+This activates CodeCortex for the current repository.
+
+Expected repo-local artifacts include:
+
+- `.codecortex/`
+- `AGENTS.md`
+
+## Mode 3 — OpenClaw-aware repository activation
+
+When CodeCortex is used through OpenClaw, setup should follow a unified flow:
+
+1. ensure `cortex` is available in the OpenClaw environment
+2. determine the target repository path
+3. activate CodeCortex in that repository if missing
+4. query repository capabilities
+5. switch into CodeCortex-aware repo mode
+
+After repository activation, OpenClaw should query repo-local capabilities:
+
+```bash
+cortex capabilities --path .
+```
+
+OpenClaw should then use the repo-local CodeCortex contract for supported operations.
+
+## OpenClaw Quick Start
+
+If you want to use CodeCortex through OpenClaw, give the following prompt to your OpenClaw agent.
+
+### Copy-paste prompt for OpenClaw
+
+```text
+Set up CodeCortex for OpenClaw-aware use.
+
+Install CodeCortex from GitHub:
+https://github.com/costeamarius/codecortex
+
+First, ensure CodeCortex is available in the OpenClaw environment.
+Then determine the target repository path.
+If the repository path is not explicit, ask me for it before continuing.
+
+After the repository is known, detect whether CodeCortex is already activated there.
+If not, run the standard repository bootstrap:
+- cortex init <repo>
+- cortex init-agent <repo>
+- cortex scan <repo>
+- cortex status <repo>
+
+Then run:
+- cortex capabilities --path <repo>
+
+Treat environment-level install and repository-level activation as separate steps.
+Do not assume that installing CodeCortex for OpenClaw automatically enables it for every repository.
+```
+
+### What this prompt is for
+
+This prompt is intended for users who want OpenClaw to:
+
+1. install or verify CodeCortex in the OpenClaw environment
+2. ask for the target repository if needed
+3. activate CodeCortex in that specific repository
+4. switch into CodeCortex-aware repo mode
+
+The user-facing prompt above is intentionally short.
+The full OpenClaw bootstrap and environment-detection flow is documented in:
+
+- `docs/openclaw-bootstrap-flow.md`
+
+## Environment Detection
+
+Agents should distinguish between environment-level install and repository-level activation.
+
+### Check 1 — Is CodeCortex available in this environment?
+
+```bash
+cortex --help
+```
+
+If this fails, CodeCortex is not installed in the current environment.
+
+### Check 2 — Is the repository already CodeCortex-enabled?
+
+A repository is typically considered CodeCortex-enabled if one or more of the following are present:
+
+- `.codecortex/`
+- `AGENTS.md`
+- repo-local CodeCortex markers recognized by integration helpers
+
+If these are missing, run the repository activation flow.
+
+### Check 3 — If running in OpenClaw
+
+OpenClaw should query:
+
+```bash
+cortex capabilities --path <repo>
+```
+
+and adopt the repository-defined operating model.
+
+## Current CLI
+
+The current CLI now exposes both repository-memory and deterministic-execution flows.
+
+### Initialize repository storage
+
+```bash
+cortex init .
+```
+
+### Generate repository agent instructions
+
+```bash
+cortex init-agent .
+```
+
+### Build a full repository graph
+
+```bash
+cortex scan .
+```
+
+### Update graph incrementally
+
+```bash
+cortex update .
+```
+
+### Inspect graph status
+
+```bash
+cortex status .
+```
+
+### Query repository graph
+
+```bash
+cortex query moderation --type module
+cortex symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
+cortex impact codecortex/graph_builder.py --depth 2 --limit 16
+cortex context codecortex/graph_builder.py
+```
+
+### Persist semantic assertions
+
+```bash
+cortex semantics add featured_portfolio.photographer.form \
+  function:fashion.portfolio.views.edit_featured_photographer \
+  uses_form \
+  class:fashion.portfolio.forms.PortfolioFormPhotographer \
+  --source agent_inferred --confidence high
+
+cortex semantics show --predicate uses_form
+cortex semantics rebuild
+```
+
+### Work with feature slices
+
+```bash
+cortex feature build image_moderation --seed "moderation,images,delete_user,gdpr" --max-files 200
+cortex feature show image_moderation
+cortex feature refresh image_moderation
+```
+
+### Benchmark retrieval payloads
+
+```bash
+cortex benchmark query graph_builder --type function --limit 5
+cortex benchmark symbol codecortex.graph_builder.build_graph --depth 1 --limit 12
+cortex benchmark impact codecortex/graph_builder.py --depth 2 --limit 16
+```
+
+### Execution commands
+
+```bash
+cortex capabilities --path .
+cortex edit-file --path . --file config.json --content '{"timeout": 30}'
+cortex run-command --path . --command 'python3 -m unittest -q'
+```
+
+## Expected Workflow
+
+CodeCortex is used in two phases:
+
+### Phase 1 — Prepare the environment
+
+Make sure the current agent environment has the `cortex` CLI available.
+
+```bash
+cortex --help
+```
+
+If `cortex` is not available, install CodeCortex first.
+
+### Phase 2 — Prepare the repository
+
+For each target repository:
+
+```bash
+cortex init .
+cortex init-agent .
+cortex scan .
+cortex status .
+```
+
+If operating through OpenClaw, also run:
+
+```bash
+cortex capabilities --path .
+```
+
+### Ongoing workflow
+
+Once the repository is activated:
+
+```bash
+cortex status .
+cortex query <term>
+cortex context <file>
+cortex symbol <qualified_symbol>
+cortex impact <file_or_symbol>
+```
+
+When repository knowledge changes:
+
+```bash
+cortex update .
+```
+
+When validated semantic knowledge should be persisted:
+
+```bash
+cortex semantics add <assertion_id> <subject> <predicate> <object>
+```
+
+OpenClaw and IDE agents should follow the same repo-defined operating model once the repository is CodeCortex-enabled.
+
+## OpenClaw Alignment
+
+CodeCortex is designed to work cleanly with OpenClaw.
+
+OpenClaw should act as:
+- detector
+- environment-level bootstrapper
+- repository activator when needed
+- runner
+- result carrier
+
+OpenClaw should not become the place where repository execution logic lives.
+That logic belongs in the repo-local CodeCortex layer.
+
+In practice, OpenClaw should:
+
+1. ensure `cortex` is available in its environment
+2. determine the target repository path
+3. activate CodeCortex in that repository if needed
+4. run `cortex capabilities --path <repo>`
+5. follow the repository-defined operating model
+
+## Output Files (`.codecortex/`)
+
+CodeCortex currently stores local repository memory in `.codecortex/`.
+
+Artifacts may include:
+- `graph.json`
+- `meta.json`
+- `semantics.json`
+- `semantics.journal.jsonl`
+- `features.json`
+- `constraints.json`
+- `decisions.jsonl`
+
+Future execution-related artifacts may include:
+- `logs/`
+- `locks/`
+- execution state files
+
+## Git Policy
+
+- `.codecortex/` is local repository memory and is ignored by default
+- repository docs and ADRs are versioned
+- user-facing documentation should be kept current with the real product state
+
+## Documentation Policy
+
+Project documentation is part of the product.
+
+The following should be kept aligned with the actual implementation as development continues:
+- `README.md`
+- ADRs
+- architecture docs
+- CLI help text
+- setup instructions
+- user-facing examples
+
+The goal is for repository documentation to always reflect the latest real product behavior and direction.
 
 ## Troubleshooting
 
 - `cortex: command not found`
-  - Ensure your virtual environment is active and rerun `pip install -e .`.
-- `AGENTS.md already exists`
-  - Run `cortex init-agent . --force` only if you want to overwrite the existing agent instructions.
+  - activate the virtual environment and rerun `pip install -e .`
 - `Graph not found. Run 'cortex scan' first.`
-  - Run `cortex scan .` before `status`, `query`, `context`, or `feature` commands.
+  - run `cortex scan .` before retrieval commands
+- `AGENTS.md already exists`
+  - use `cortex init-agent . --force` only if you intend to replace it
 - `update` falls back to full scan
-  - Ensure the target folder is a git repository and `git` is installed.
-- `File '<path>' is not present in the current graph.`
-  - Run `cortex update .` (or `cortex scan .`) and retry `cortex context <path>`.
+  - ensure the target folder is a git repository and `git` is installed
 
 ## License
 
