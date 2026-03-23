@@ -4,24 +4,35 @@ import os
 def default_agents_md():
     return """# CodeCortex Instructions
 
-Use CodeCortex before manually scanning the repository.
+If this repository is CodeCortex-enabled, participating agents should adopt the
+repository-defined CodeCortex operating model.
 
-## Required workflow
+## Required startup workflow
 
-1. Run `cortex status .`
-2. If no graph exists, run `cortex scan .`
-3. If the graph is out of date, run `cortex update .`
+1. Run `cortex capabilities --path .`
+2. Run `cortex status .`
+3. If no graph exists, run `cortex scan .`
+4. If the graph is out of date, run `cortex update .`
 
-## Discovery
+## Retrieval and discovery
 
+- Prefer CodeCortex retrieval before broad manual repository exploration
 - For repository-wide discovery, run `cortex query <term>`
 - For file-level dependency context, run `cortex context <file>`
+- For symbol-level exploration, run `cortex symbol <qualified_symbol>`
+- For dependency impact analysis, run `cortex impact <file_or_symbol>`
+
+## Supported execution path
+
+- Use `cortex edit-file --path . --file <file> --content <content>` for supported file edits
+- Use `cortex run-command --path . --command <command>` for supported command execution
+- For supported operations, do not bypass the repo-local CodeCortex CLI with direct file writes or environment-specific execution behavior
 
 ## Notes
 
-- Prefer CodeCortex output before broad manual repository exploration
 - Run commands from the repository root when possible
-- Use `.codecortex/graph.json` as the primary repository knowledge source
+- Treat CodeCortex as the primary repo-local interface when available
+- Use `.codecortex/graph.json` as a repository knowledge artifact, not as a replacement for the CLI contract
 """
 
 
