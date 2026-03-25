@@ -27,8 +27,8 @@ def is_participating_agent(environment: str | None) -> bool:
 def required_codecortex_operations() -> List[str]:
     return [
         "repository retrieval via CodeCortex CLI when available",
-        "supported file mutations via `cortex edit-file`",
-        "supported command execution via `cortex run-command`",
+        "supported mutations via the runtime gateway `cortex action`",
+        "structured JSON requests via `cortex action --stdin` or `cortex action --request-file`",
     ]
 
 

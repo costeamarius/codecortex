@@ -123,13 +123,10 @@ OpenClaw should avoid assuming the target repository when user intent is ambiguo
 
 ## Step 4 — Detect whether the repository is already CodeCortex-enabled
 
-A repository may be treated as CodeCortex-enabled if one or more of the following markers exist:
+A repository is CodeCortex-enabled only when `.codecortex/meta.json` exists and is valid.
 
-- `.codecortex/`
-- `AGENTS.md`
-- repo-local CodeCortex detection markers exposed by integration helpers
-
-OpenClaw may also use repo-local detection helpers where available.
+`.codecortex/`, `AGENTS.md`, and other helper markers are advisory only.
+OpenClaw may use repo-local detection helpers, but they should resolve to the same canonical rule.
 
 If the repository is already enabled, OpenClaw should not re-bootstrap it unnecessarily.
 
@@ -173,7 +170,7 @@ This is the handoff point between generic OpenClaw behavior and repo-defined Cod
 After capability discovery, OpenClaw should:
 
 - use repo-local CodeCortex retrieval first when appropriate
-- use repo-local CodeCortex execution commands for supported operations
+- use `cortex action` for supported operations
 - follow repo-defined operating behavior
 - avoid embedding duplicate execution logic outside the repository contract
 

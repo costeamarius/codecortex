@@ -250,11 +250,12 @@ v1 execution-layer error families:
 
 The repo-local CLI is the canonical interface for participating agents.
 
-Planned execution commands:
-- `edit-file`
-- `run-command`
+Canonical runtime ingress:
+- `cortex action --stdin`
+- `cortex action --request-file <path>`
 
-Command naming is intentionally explicit and action-oriented.
+Structured JSON requests are the primary machine-readable contract for participating agents.
+Compatibility commands such as `edit-file` and `run-command` may exist, but they are legacy convenience surfaces rather than the canonical public boundary.
 
 The CLI should support machine-readable output for participating agents.
 
@@ -264,12 +265,12 @@ The CLI should support machine-readable output for participating agents.
 
 For v1, agents discover the supported operating model through a combination of:
 
-- repo-local CodeCortex presence
+- valid `.codecortex/meta.json`
 - repo-local CLI availability
+- `cortex capabilities --path <repo>`
 - repository instructions
-- repository documentation
 
-A richer explicit machine-readable capability report may be added later.
+Capability reporting is part of the v1 runtime boundary.
 
 ---
 

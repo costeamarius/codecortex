@@ -1,7 +1,16 @@
-"""Minimal deterministic action executor."""
+"""Internal deterministic executor used by the runtime kernel.
+
+This module is not the public agent boundary. External callers should enter
+through the runtime gateway/kernel and let the runtime decide when execution
+is invoked.
+"""
 
 from __future__ import annotations
 
+import inspect
+import warnings
+
+from .errors import RuntimeBypassError
 from .command_ops import run_command_safe
 from .file_ops import edit_file_safe
 from .logger import append_operation_log, normalize_log_entry
@@ -10,34 +19,39 @@ from .models import ExecutionAction, ExecutionResult
 
 SUPPORTED_ACTIONS = {"edit_file", "run_command"}
 SUPPORTED_STATUSES = {"success", "failure", "blocked", "not_implemented"}
+ALLOWED_RUNTIME_CALLERS = {
+    "codecortex.runtime.kernel",
+    "codecortex.runtime.execution_bridge",
+}
 
 
-def blocked_result(action: str, resource: str, owner: str | None = None, retry_after_seconds: int = 10) -> ExecutionResult:
-    return ExecutionResult(
-        status="blocked",
-        action=action,
-        details={
-            "resource": resource,
-            "owner": owner,
-            "retry_after_seconds": retry_after_seconds,
-        },
-    )
+def _require_runtime_kernel_caller() -> None:
+    caller = inspect.currentframe()
+    if caller is None or caller.f_back is None or caller.f_back.f_back is None:
+        raise RuntimeBypassError("Execution must be invoked through RuntimeKernel.handle_action().")
 
-
-def failure_result(action: str, error_type: str, message: str, **details) -> ExecutionResult:
-    return ExecutionResult(
-        status="failure",
-        action=action,
-        details={
-            "error_type": error_type,
-            "message": message,
-            **details,
-        },
-    )
+    caller_module = caller.f_back.f_back.f_globals.get("__name__")
+    if caller_module not in ALLOWED_RUNTIME_CALLERS:
+        raise RuntimeBypassError(
+            "Execution must be invoked through the runtime kernel execution path."
+        )
 
 
 def execute_action(action: ExecutionAction) -> ExecutionResult:
-    """Execute a structured action through the repo-local execution layer."""
+    """Deprecated internal executor entrypoint.
+
+    External callers should use ``codecortex.runtime.AgentGateway`` or the
+    repo-local ``cortex action`` CLI surface instead of calling this function
+    directly.
+    """
+    warnings.warn(
+        "codecortex.execution.executor.execute_action() is deprecated as a public surface. "
+        "Use AgentGateway.handle_action() or `cortex action` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _require_runtime_kernel_caller()
+
     if action.action not in SUPPORTED_ACTIONS:
         result = ExecutionResult(
             status="not_implemented",

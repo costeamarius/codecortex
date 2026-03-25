@@ -132,13 +132,20 @@ def build_feature_entry(
         for edge in edges
         if edge.get("from") in selected_file_ids and edge.get("to", "").startswith("module:")
     }
-    selected_module_names = sorted(
+    selected_module_names = {
         node_by_id[module_id].get("name")
         for module_id in selected_module_ids
         if module_id in node_by_id and node_by_id[module_id].get("name")
+    }
+    selected_module_names.update(
+        node.get("module")
+        for node_id in visited_ids
+        for node in [node_by_id.get(node_id)]
+        if node and node.get("module")
     )
+    selected_module_names = sorted(selected_module_names)
 
-    selected_nodes = sorted(selected_file_ids | selected_module_ids)
+    selected_nodes = sorted(set(visited_ids) | selected_file_ids | selected_module_ids)
     selected_edges = [
         edge
         for edge in edges

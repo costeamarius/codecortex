@@ -1,16 +1,13 @@
-"""Execution layer for deterministic repository operations.
+"""Internal execution substrate for deterministic repository operations.
 
-This package hosts the repo-local execution substrate introduced in ADR-002.
-It is intentionally minimal in v1 and will evolve in later phases.
+The public runtime boundary lives under ``codecortex.runtime``. This package
+contains repo-local execution primitives used by the runtime kernel.
 """
 
-from .executor import execute_action
-from .models import ExecutionAction, ExecutionResult, LockRecord, ValidationResult
+from .models import ExecutionAction, ExecutionResult, ValidationResult
 
 __all__ = [
-    "execute_action",
     "ExecutionAction",
     "ExecutionResult",
-    "LockRecord",
     "ValidationResult",
 ]

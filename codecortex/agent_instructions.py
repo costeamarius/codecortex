@@ -24,9 +24,24 @@ repository-defined CodeCortex operating model.
 
 ## Supported execution path
 
-- Use `cortex edit-file --path . --file <file> --content <content>` for supported file edits
-- Use `cortex run-command --path . --command <command>` for supported command execution
+- Use the runtime gateway via `cortex action`
+- Send a structured JSON request envelope into `cortex action --stdin` or `cortex action --request-file <path>`
+- For file edits, use action `edit_file` with repo-relative `payload.file` and new `payload.content`
+- For command execution, use action `run_command` with `payload.command` as an argv array
+- When operating from a participating environment, include `environment` and `agent_id` on mutating requests
 - For supported operations, do not bypass the repo-local CodeCortex CLI with direct file writes or environment-specific execution behavior
+
+### Runtime request shape
+
+```json
+{
+  "action": "edit_file|run_command",
+  "repo": ".",
+  "agent_id": "agent-identifier",
+  "environment": "openclaw|cursor|ide|local_cli|external_agent",
+  "payload": {}
+}
+```
 
 ## Notes
 

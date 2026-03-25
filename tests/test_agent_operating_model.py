@@ -20,7 +20,9 @@ class AgentOperatingModelTests(unittest.TestCase):
     def test_required_operations_are_defined(self):
         operations = required_codecortex_operations()
         self.assertTrue(operations)
-        self.assertIn("cortex edit-file", " ".join(operations))
+        self.assertIn("cortex action", " ".join(operations))
+        self.assertNotIn("cortex edit-file", " ".join(operations))
+        self.assertNotIn("cortex run-command", " ".join(operations))
 
     def test_bypass_examples_are_defined(self):
         examples = direct_bypass_examples()

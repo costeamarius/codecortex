@@ -32,8 +32,7 @@ OpenClaw must not:
 
 ```bash
 cortex capabilities --path /repo
-cortex edit-file --path /repo --file config.json --content '{"timeout": 30}'
-cortex run-command --path /repo --command 'python3 -m unittest -q'
+cortex action --stdin
 ```
 
 ## Bootstrap model
@@ -41,6 +40,7 @@ cortex run-command --path /repo --command 'python3 -m unittest -q'
 Recommended v1 flow:
 
 1. detect CodeCortex markers in the target repository
+   authoritative rule: valid `.codecortex/meta.json`
 2. if missing, bootstrap CodeCortex into the repo
 3. query `cortex capabilities --path <repo>`
 4. switch the agent into Codecortex-aware mode
@@ -50,8 +50,7 @@ Recommended v1 flow:
 
 When OpenClaw detects a Codecortex-enabled repository, it should:
 - prefer CodeCortex retrieval before broad manual exploration
-- use `cortex edit-file` for supported file mutations
-- use `cortex run-command` for supported command execution
+- submit structured JSON actions through `cortex action`
 - treat the repository as repo-defined, not environment-defined
 
 ## IDE parity

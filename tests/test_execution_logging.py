@@ -2,10 +2,14 @@ import json
 import os
 import tempfile
 import unittest
+import warnings
 
+from codecortex.execution.errors import RuntimeBypassError
 from codecortex.execution.executor import execute_action
 from codecortex.execution.logger import append_operation_log, normalize_log_entry
 from codecortex.execution.models import ExecutionAction
+from codecortex.runtime.kernel import RuntimeKernel
+from codecortex.runtime.models import ActionRequest
 
 
 class ExecutionLoggingTests(unittest.TestCase):
@@ -39,21 +43,68 @@ class ExecutionLoggingTests(unittest.TestCase):
             payload = json.loads(lines[0])
             self.assertEqual(payload["status"], "success")
 
-    def test_execute_action_logs_successful_edit(self):
+    def test_direct_execute_action_call_is_blocked(self):
+        with tempfile.TemporaryDirectory() as repo_path:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                with self.assertRaises(RuntimeBypassError):
+                    execute_action(
+                        ExecutionAction(
+                            action="run_command",
+                            repo=repo_path,
+                            agent_id="logger-agent",
+                            environment="test",
+                            payload={"command": ["python3", "-c", "print('nope')"]},
+                        )
+                    )
+            self.assertTrue(caught)
+            self.assertIn("deprecated as a public surface", str(caught[0].message))
+
+    def test_runtime_kernel_logs_successful_edit(self):
         with tempfile.TemporaryDirectory() as repo_path:
             os.makedirs(os.path.join(repo_path, ".codecortex", "locks"), exist_ok=True)
+            with open(
+                os.path.join(repo_path, ".codecortex", "meta.json"),
+                "w",
+                encoding="utf-8",
+            ) as handle:
+                json.dump(
+                    {
+                        "schema_version": "1.1",
+                        "repo_id": "repo-123",
+                        "initialized_at": "2026-03-25T00:00:00+00:00",
+                    },
+                    handle,
+                )
+            with open(
+                os.path.join(repo_path, ".codecortex", "state.json"),
+                "w",
+                encoding="utf-8",
+            ) as handle:
+                json.dump(
+                    {
+                        "repo_initialized": True,
+                        "graph_dirty": False,
+                        "last_action_at": None,
+                        "last_action_id": None,
+                        "last_scan_at": None,
+                        "last_scan_commit": None,
+                    },
+                    handle,
+                )
             file_path = os.path.join(repo_path, "sample.py")
             with open(file_path, "w", encoding="utf-8") as handle:
                 handle.write("x = 1\n")
 
-            action = ExecutionAction(
-                action="edit_file",
-                repo=repo_path,
-                agent_id="logger-agent",
-                environment="test",
-                payload={"file": "sample.py", "content": "x = 3\n", "validate": True},
+            result = RuntimeKernel().handle_action(
+                ActionRequest(
+                    action="edit_file",
+                    repo=repo_path,
+                    agent_id="logger-agent",
+                    environment="test",
+                    payload={"file": "sample.py", "content": "x = 3\n", "validate": True},
+                )
             )
-            result = execute_action(action)
             self.assertEqual(result.status, "success")
 
             log_path = os.path.join(repo_path, ".codecortex", "logs", "operations.jsonl")
@@ -68,6 +119,7 @@ class ExecutionLoggingTests(unittest.TestCase):
             self.assertEqual(last["agent_id"], "logger-agent")
             self.assertEqual(last["environment"], "test")
             self.assertEqual(last["target"], "sample.py")
+            self.assertEqual(last["details"]["stage"], "memory_feedback")
 
 
 if __name__ == "__main__":

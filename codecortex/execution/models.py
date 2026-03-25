@@ -29,17 +29,6 @@ class ExecutionResult:
 
 
 @dataclass
-class LockRecord:
-    resource: str
-    owner: str
-    created_at: str
-    expires_at: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
 class ValidationResult:
     passed: bool
     validator: Optional[str] = None

@@ -1,12 +1,11 @@
 import json
 import os
+import sys
 from typing import Optional
 
 import typer
 from codecortex.agent_instructions import write_agents_md
 from codecortex.benchmarking import benchmark_impact, benchmark_query, benchmark_symbol
-from codecortex.execution.executor import execute_action
-from codecortex.execution.models import ExecutionAction
 from codecortex.feature_graph import (
     build_feature_entry,
     get_feature,
@@ -17,6 +16,9 @@ from codecortex.graph_builder import build_graph, save_graph, update_graph
 from codecortex.graph_context import compute_file_context
 from codecortex.graph_query import impact_subgraph, search_graph, symbol_subgraph
 from codecortex.graph_status import compute_graph_status
+from codecortex.memory.constraint_store import build_default_constraints
+from codecortex.memory.decision_store import append_decision
+from codecortex.memory.state_store import build_initial_runtime_state, build_state_paths
 from codecortex.project_context import (
     get_changed_python_files,
     get_head_commit,
@@ -34,32 +36,15 @@ from codecortex.semantics_store import (
     rebuild_semantics_store_from_events,
     upsert_assertion,
 )
+from codecortex.runtime.gateway import AgentGateway
+from codecortex.runtime.capabilities import build_capabilities_snapshot
 
 app = typer.Typer(no_args_is_help=True)
 feature_app = typer.Typer(no_args_is_help=True)
 benchmark_app = typer.Typer(no_args_is_help=True)
 semantics_app = typer.Typer(no_args_is_help=True)
-DEFAULT_CONSTRAINTS = [
-    (
-        "Keep CodeCortex-generated project memory artifacts under .codecortex/ "
-        "(for notes use .codecortex/notes/) and avoid writing them into docs/ "
-        "or repository root."
-    )
-]
-
-
 def _cortex_paths(repo_path):
-    cortex_dir = os.path.join(repo_path, ".codecortex")
-    return {
-        "dir": cortex_dir,
-        "graph": os.path.join(cortex_dir, "graph.json"),
-        "meta": os.path.join(cortex_dir, "meta.json"),
-        "features": os.path.join(cortex_dir, "features.json"),
-        "semantics": os.path.join(cortex_dir, "semantics.json"),
-        "semantics_journal": os.path.join(cortex_dir, "semantics.journal.jsonl"),
-        "constraints": os.path.join(cortex_dir, "constraints.json"),
-        "decisions": os.path.join(cortex_dir, "decisions.jsonl"),
-    }
+    return build_state_paths(repo_path)
 
 
 def _base_meta(repo_path):
@@ -126,6 +111,36 @@ def _print_result(payload: dict):
     print(json.dumps(payload, indent=2))
 
 
+def _runtime_action_payload(
+    *,
+    action: str,
+    repo: str,
+    payload: dict,
+    agent_id: Optional[str],
+    environment: Optional[str],
+):
+    return {
+        "action": action,
+        "repo": repo,
+        "payload": payload,
+        "agent_id": agent_id,
+        "environment": environment,
+    }
+
+
+def _load_action_request_payload(
+    request_file: Optional[str],
+    stdin: bool,
+):
+    if bool(request_file) == bool(stdin):
+        raise typer.BadParameter("Provide exactly one of --request-file or --stdin.")
+
+    if request_file:
+        return read_json(request_file)
+
+    return json.load(sys.stdin)
+
+
 @app.callback()
 def main():
     """CodeCortex CLI."""
@@ -139,13 +154,15 @@ def init(path: str = typer.Argument(".")):
 
     meta = _load_meta_or_default(path)
     write_json(paths["meta"], meta)
+    if not os.path.exists(paths["state"]):
+        write_json(paths["state"], build_initial_runtime_state())
 
     for file_path, empty_payload in (
         (paths["features"], {"schema_version": "1.1", "features": []}),
         (paths["semantics"], {"schema_version": "1.0", "assertions": []}),
         (
             paths["constraints"],
-            {"schema_version": "1.0", "constraints": DEFAULT_CONSTRAINTS},
+            build_default_constraints(),
         ),
     ):
         if not os.path.exists(file_path):
@@ -278,23 +295,17 @@ def status(path: str = typer.Argument(".")):
 
 @app.command()
 def capabilities(path: str = typer.Option(".", "--path")):
-    repo_path = os.path.abspath(path)
-    payload = {
-        "codecortex_enabled": os.path.isdir(os.path.join(repo_path, "codecortex")) or os.path.isdir(os.path.join(repo_path, ".codecortex")),
-        "repo": repo_path,
-        "execution": {
-            "cli_commands": ["edit-file", "run-command"],
-            "supported_actions": ["edit_file", "run_command"],
-            "deterministic_execution_v1": True,
-        },
-        "memory": {
-            "cli_commands": [
-                "init", "init-agent", "scan", "update", "status", "query", "context",
-                "symbol", "impact", "remember", "feature", "semantics", "benchmark"
-            ]
-        },
-    }
-    _print_result(payload)
+    _print_result(build_capabilities_snapshot(path))
+
+
+@app.command("action")
+def action_command(
+    request_file: Optional[str] = typer.Option(None, "--request-file"),
+    stdin: bool = typer.Option(False, "--stdin"),
+):
+    payload = _load_action_request_payload(request_file=request_file, stdin=stdin)
+    response = AgentGateway().handle_action(payload)
+    _print_result(response.to_dict())
 
 
 @app.command("edit-file")
@@ -306,9 +317,14 @@ def edit_file_command(
     environment: Optional[str] = typer.Option(None, "--environment"),
     validate: bool = typer.Option(True, "--validate/--no-validate"),
     lock_ttl_seconds: int = typer.Option(30, "--lock-ttl-seconds"),
+    auto_update_graph: bool = typer.Option(
+        False,
+        "--auto-update-graph",
+        help="Incrementally refresh .codecortex/graph.json after a successful Python edit when a graph already exists.",
+    ),
 ):
-    result = execute_action(
-        ExecutionAction(
+    response = AgentGateway().handle_action(
+        _runtime_action_payload(
             action="edit_file",
             repo=path,
             agent_id=agent_id,
@@ -318,10 +334,11 @@ def edit_file_command(
                 "content": content,
                 "validate": validate,
                 "lock_ttl_seconds": lock_ttl_seconds,
+                "auto_update_graph": auto_update_graph,
             },
         )
     )
-    _print_result(result.to_dict())
+    _print_result(response.to_dict())
 
 
 @app.command("run-command")
@@ -331,9 +348,14 @@ def run_command_cli(
     agent_id: Optional[str] = typer.Option(None, "--agent-id"),
     environment: Optional[str] = typer.Option(None, "--environment"),
     timeout_seconds: Optional[int] = typer.Option(None, "--timeout-seconds"),
+    auto_update_graph: bool = typer.Option(
+        False,
+        "--auto-update-graph",
+        help="Incrementally refresh .codecortex/graph.json after a successful command that changed Python files.",
+    ),
 ):
-    result = execute_action(
-        ExecutionAction(
+    response = AgentGateway().handle_action(
+        _runtime_action_payload(
             action="run_command",
             repo=path,
             agent_id=agent_id,
@@ -341,10 +363,11 @@ def run_command_cli(
             payload={
                 "command": ["bash", "-lc", command],
                 "timeout_seconds": timeout_seconds,
+                "auto_update_graph": auto_update_graph,
             },
         )
     )
-    _print_result(result.to_dict())
+    _print_result(response.to_dict())
 
 
 @app.command()
@@ -478,15 +501,15 @@ def remember(
     paths = _cortex_paths(path)
     os.makedirs(paths["dir"], exist_ok=True)
 
-    entry = {
-        "timestamp": utc_now_iso(),
-        "git_commit": get_head_commit(path),
-        "title": title,
-        "summary": summary,
-    }
-
-    with open(paths["decisions"], "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    entry = append_decision(
+        paths["decisions"],
+        {
+            "timestamp": utc_now_iso(),
+            "git_commit": get_head_commit(path),
+            "title": title,
+            "summary": summary,
+        },
+    )
 
     print("Decision stored in .codecortex/decisions.jsonl")
 
@@ -503,6 +526,7 @@ def feature_build(
     if not graph:
         print("Graph not found. Run `cortex scan` first.")
         raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
 
     seed_terms = [part.strip() for part in seed.split(",")] if seed else []
     store = _load_features_store(path)
@@ -552,6 +576,7 @@ def feature_refresh(
     if not graph:
         print("Graph not found. Run `cortex scan` first.")
         raise typer.Exit(code=1)
+    graph = merge_graph_with_semantics(graph, _load_semantics_store(path))
 
     store = _load_features_store(path)
     existing = get_feature(store, name)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import difflib
+import inspect
 import os
 import shutil
 import tempfile
 from typing import Tuple
 
-from .errors import PathViolationError
+from .errors import PathViolationError, RuntimeBypassError
 from .locks import DEFAULT_LOCK_TTL_SECONDS, acquire_write_lock, release_lock
 from .logger import append_operation_log, normalize_log_entry
 from .models import ExecutionResult
@@ -59,6 +60,16 @@ def write_file_safe(path: str, content: str) -> Tuple[str, str]:
     return original, backup_path
 
 
+def _require_executor_caller() -> None:
+    caller = inspect.currentframe()
+    if caller is None or caller.f_back is None or caller.f_back.f_back is None:
+        raise RuntimeBypassError("File mutation must be invoked through the runtime executor.")
+
+    caller_module = caller.f_back.f_back.f_globals.get("__name__")
+    if caller_module not in {"codecortex.execution.executor", "codecortex.runtime.execution_bridge"}:
+        raise RuntimeBypassError("File mutation must be invoked through the runtime executor.")
+
+
 def edit_file_safe(
     repo_path: str,
     relative_path: str,
@@ -68,6 +79,7 @@ def edit_file_safe(
     lock_ttl_seconds: int = DEFAULT_LOCK_TTL_SECONDS,
     environment: str | None = None,
 ) -> ExecutionResult:
+    _require_executor_caller()
     target_path = resolve_repo_path(repo_path, relative_path)
     if not os.path.exists(target_path):
         result = ExecutionResult(

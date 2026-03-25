@@ -19,3 +19,7 @@ class LockConflictError(ExecutionError):
 
 class CommandExecutionError(ExecutionError):
     """Raised when a command execution fails."""
+
+
+class RuntimeBypassError(ExecutionError):
+    """Raised when execution is invoked outside the runtime-controlled path."""

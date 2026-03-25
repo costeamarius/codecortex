@@ -1,6 +1,12 @@
 import os
 
 from codecortex.project_context import read_json
+from codecortex.semantics_store import (
+    merge_graph_with_semantics,
+    normalize_semantics_store,
+    read_jsonl,
+    rebuild_semantics_store_from_events,
+)
 
 
 def _normalize_file_path(repo_path, file_path):
@@ -26,16 +32,15 @@ def _path_to_module(relative_path):
     return module_path
 
 
-def compute_file_context(repo_path, graph_path, file_path):
-    graph = read_json(graph_path)
+def compute_file_context_from_graph(repo_path, graph, file_path):
     if not graph:
         return {"graph_present": False}
 
     normalized_file = _normalize_file_path(repo_path, file_path)
     file_node_id = f"file:{normalized_file}"
     nodes = graph.get("nodes", [])
-    node_ids = {node.get("id") for node in nodes}
-    if file_node_id not in node_ids:
+    node_by_id = {node.get("id"): node for node in nodes if node.get("id")}
+    if file_node_id not in node_by_id:
         return {
             "graph_present": True,
             "file_found": False,
@@ -75,7 +80,6 @@ def compute_file_context(repo_path, graph_path, file_path):
             if edge.get("from") == file_node_id and edge.get("type") == "defines"
         }
     )
-    node_by_id = {node.get("id"): node for node in nodes}
     symbols_defined = [
         node_by_id[symbol_id]
         for symbol_id in defined_symbol_ids
@@ -96,6 +100,10 @@ def compute_file_context(repo_path, graph_path, file_path):
         "graph_present": True,
         "file_found": True,
         "file": normalized_file,
+        "file_node": node_by_id[file_node_id],
+        "file_node_id": file_node_id,
+        "module_name": module_name,
+        "module_node_id": module_node_id,
         "imports": imports,
         "imported_by": imported_by,
         "symbols_defined": symbols_defined,
@@ -106,3 +114,27 @@ def compute_file_context(repo_path, graph_path, file_path):
             "git_commit": graph.get("git_commit"),
         },
     }
+
+
+def compute_file_context(repo_path, graph_path, file_path):
+    graph = read_json(graph_path)
+    if graph:
+        graph = _merge_graph_with_adjacent_semantic_memory(graph_path, graph)
+    return compute_file_context_from_graph(repo_path, graph, file_path)
+
+
+def _merge_graph_with_adjacent_semantic_memory(graph_path, graph):
+    graph_dir = os.path.dirname(graph_path)
+    semantics_path = os.path.join(graph_dir, "semantics.json")
+    semantics_journal_path = os.path.join(graph_dir, "semantics.journal.jsonl")
+
+    store = normalize_semantics_store(read_json(semantics_path))
+    journal_events = read_jsonl(semantics_journal_path)
+    if journal_events:
+        rebuilt_store = rebuild_semantics_store_from_events(journal_events)
+        if rebuilt_store.get("assertions") != store.get("assertions"):
+            store = rebuilt_store
+
+    if not store.get("assertions"):
+        return graph
+    return merge_graph_with_semantics(graph, store)

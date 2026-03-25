@@ -79,6 +79,40 @@ class SymbolGraphTests(unittest.TestCase):
             self.assertIn("function:pkg.main.helper", symbol_ids)
             self.assertIn("class:pkg.main.Greeter", symbol_ids)
 
+    def test_file_context_merges_adjacent_semantic_memory(self):
+        with tempfile.TemporaryDirectory() as repo_path:
+            os.makedirs(os.path.join(repo_path, ".codecortex"), exist_ok=True)
+            os.makedirs(os.path.join(repo_path, "pkg"), exist_ok=True)
+            with open(os.path.join(repo_path, "pkg", "__init__.py"), "w", encoding="utf-8") as f:
+                f.write("")
+            with open(os.path.join(repo_path, "pkg", "main.py"), "w", encoding="utf-8") as f:
+                f.write("def helper():\n    return 1\n")
+
+            graph = build_graph(repo_path, generated_at="now", git_commit="head")
+            graph_path = os.path.join(repo_path, ".codecortex", "graph.json")
+            with open(graph_path, "w", encoding="utf-8") as f:
+                json.dump(graph, f)
+            with open(os.path.join(repo_path, ".codecortex", "semantics.json"), "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "schema_version": "1.0",
+                        "assertions": [
+                            {
+                                "id": "helper.rule",
+                                "subject": "function:pkg.main.helper",
+                                "predicate": "uses_rule",
+                                "object": "semantic:repo.rule",
+                            }
+                        ],
+                    },
+                    f,
+                )
+
+            payload = compute_file_context(repo_path, graph_path, "pkg/main.py")
+            relation_types = {relation["type"] for relation in payload["symbol_relations"]}
+
+            self.assertIn("uses_rule", relation_types)
+
 
 if __name__ == "__main__":
     unittest.main()

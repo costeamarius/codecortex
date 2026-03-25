@@ -7,6 +7,10 @@
 
 This document defines the initial runtime behavior for the minimal execution layer introduced in ADR-002.
 
+The canonical participating-agent ingress is `cortex action`, which routes through:
+
+`Agent -> AgentGateway -> RuntimeKernel -> Policy -> ExecutionBridge -> MemoryFeedback`
+
 ## Runtime directories
 
 Execution-related runtime data lives under `.codecortex/`.
@@ -50,9 +54,10 @@ Location:
 ```
 
 v1 behavior:
-- reserved for lightweight execution metadata
-- may track runtime version or minimal execution state
-- intentionally simple in v1
+- lightweight runtime execution metadata
+- tracks repo initialization and graph freshness state
+- tracks the last action timestamp and action id
+- tracks the last graph scan timestamp and commit
 
 ### Backups
 
@@ -63,4 +68,6 @@ v1 strategy:
 
 ## Detection note
 
-For v1, `.codecortex/` and repo-local CodeCortex structure are sufficient practical signals for a Codecortex-enabled repository.
+For v1, a repository is CodeCortex-enabled only when `.codecortex/meta.json` exists and is valid.
+
+`.codecortex/`, `AGENTS.md`, and other markers are advisory only and do not by themselves authorize runtime actions.

@@ -12,7 +12,7 @@ CodeCortex has two primary layers:
    - provides compact retrieval interfaces for AI agents
 
 2. **Deterministic execution layer**
-   - provides a repo-local path for controlled file and command execution
+   - provides a repo-local runtime path for controlled file and command execution
    - returns machine-readable results
    - supports validation, logging, and minimal locking in v1
 
@@ -31,7 +31,7 @@ If a repository is Codecortex-enabled, participating agents should adopt the sam
 [ IDE Agent ]      [ OpenClaw Agent ]      [ External Agent ]
        \                |                /
         \               |               /
-         -> repo-local CodeCortex CLI <-
+         -> repo-local CodeCortex CLI / runtime ingress <-
                     |
         ------------------------------
         |                            |
@@ -74,6 +74,12 @@ The repo-local execution substrate includes:
 - structured command execution
 
 Relevant modules include:
+- `codecortex/runtime/gateway.py`
+- `codecortex/runtime/kernel.py`
+- `codecortex/runtime/context_builder.py`
+- `codecortex/runtime/policy_engine.py`
+- `codecortex/runtime/memory_feedback.py`
+- `codecortex/runtime/execution_bridge.py`
 - `codecortex/execution/executor.py`
 - `codecortex/execution/file_ops.py`
 - `codecortex/execution/validators.py`
@@ -99,7 +105,7 @@ Relevant modules include:
 
 CodeCortex persists repository-local runtime data under `.codecortex/`.
 
-Current artifacts may include:
+Current artifacts include:
 - `graph.json`
 - `meta.json`
 - `features.json`
@@ -118,9 +124,13 @@ Current artifacts may include:
 ```text
 Agent decides change
     ↓
-repo-local CLI (`cortex edit-file`)
+repo-local runtime ingress (`cortex action`)
     ↓
-execution executor
+runtime gateway + kernel
+    ↓
+context + policy
+    ↓
+execution bridge
     ↓
 path resolution
     ↓
@@ -142,9 +152,13 @@ structured result
 ```text
 Agent requests command
     ↓
-repo-local CLI (`cortex run-command`)
+repo-local runtime ingress (`cortex action`)
     ↓
-execution executor
+runtime gateway + kernel
+    ↓
+context + policy
+    ↓
+execution bridge
     ↓
 repo-context subprocess execution
     ↓
@@ -203,17 +217,18 @@ v1 locking behavior:
 
 ### Execution-oriented commands
 - `capabilities`
-- `edit-file`
-- `run-command`
+- `action`
+
+Legacy compatibility commands still exist for `edit-file` and `run-command`, but they route into the same runtime boundary and are not the canonical public interface for participating agents.
 
 ## OpenClaw Alignment
 
 OpenClaw is treated as a runner and integration environment.
 
 OpenClaw should:
-- detect Codecortex-enabled repositories
+- detect Codecortex-enabled repositories using the canonical repo rule
 - query repo-local capabilities
-- use repo-local CLI commands for supported operations
+- use `cortex action` for supported operations
 - consume structured results
 
 OpenClaw should not:
@@ -226,7 +241,7 @@ OpenClaw should not:
 
 Participating agents should:
 - use CodeCortex retrieval when available
-- use the same repo-local CLI contract for supported operations
+- use the same repo-local runtime contract for supported operations
 - avoid bypassing the execution substrate for supported mutations
 - respect the same repo-defined operating rules as OpenClaw
 

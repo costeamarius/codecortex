@@ -38,16 +38,16 @@ Instead of repeatedly rediscovering structure, relationships, and validated proj
 As agent-driven development becomes more capable, repository memory alone is not enough.
 Agents also need a reliable and deterministic way to operate on the repository, especially when multiple tools or agent environments interact with the same project.
 
-That is why CodeCortex is evolving beyond repository understanding into a repository-aligned execution model.
+That is why CodeCortex is evolving beyond repository understanding into a repository-aligned runtime model.
 
 ## Current Direction
 
 CodeCortex is evolving toward the following architecture:
 
 - **Codecortex core** understands repository structure and semantic relationships
-- **Execution layer** enforces a deterministic operational path
+- **Runtime layer** enforces a deterministic operational path
 - **AI agents** decide what should happen
-- **OpenClaw and IDE environments** invoke the same repo-local interface
+- **OpenClaw and IDE environments** invoke the same repo-local runtime boundary
 
 Design principles:
 
@@ -68,7 +68,7 @@ What exists today:
 - semantic assertion storage
 - feature-oriented graph slices
 - benchmark utilities
-- minimal repo-local execution layer (v1)
+- minimal repo-local runtime layer (v1)
 - deterministic file operation path
 - validation before mutation
 - structured operation logging
@@ -118,9 +118,9 @@ It exists to make execution predictable, debuggable, and reliable.
 [ IDE Agent ]      [ OpenClaw Agent ]
        \              /
         \            /
-         -> repo-local CLI -> CodeCortex
+         -> repo-local CLI -> runtime gateway -> CodeCortex
                               ├─ repository memory
-                              └─ execution substrate
+                              └─ runtime + execution substrate
                                    ↓
                                 repository
 ```
@@ -286,6 +286,9 @@ Expected repo-local artifacts include:
 - `.codecortex/`
 - `AGENTS.md`
 
+The authoritative enablement marker is a valid `.codecortex/meta.json`.
+`AGENTS.md` and the presence of `.codecortex/` are advisory only.
+
 ## Mode 3 — OpenClaw-aware repository activation
 
 When CodeCortex is used through OpenClaw, setup should follow a unified flow:
@@ -302,7 +305,7 @@ After repository activation, OpenClaw should query repo-local capabilities:
 cortex capabilities --path .
 ```
 
-OpenClaw should then use the repo-local CodeCortex contract for supported operations.
+OpenClaw should then use the repo-local CodeCortex contract for supported operations through `cortex action`.
 
 ## OpenClaw Quick Start
 
@@ -320,7 +323,7 @@ First, ensure CodeCortex is available in the OpenClaw environment.
 Then determine the target repository path.
 If the repository path is not explicit, ask me for it before continuing.
 
-After the repository is known, detect whether CodeCortex is already activated there.
+After the repository is known, detect whether CodeCortex is already activated there by checking for a valid `.codecortex/meta.json`.
 If not, run the standard repository bootstrap:
 - cortex init <repo>
 - cortex init-agent <repo>
@@ -362,13 +365,9 @@ If this fails, CodeCortex is not installed in the current environment.
 
 ### Check 2 — Is the repository already CodeCortex-enabled?
 
-A repository is typically considered CodeCortex-enabled if one or more of the following are present:
+A repository is CodeCortex-enabled only when `.codecortex/meta.json` exists and is valid.
 
-- `.codecortex/`
-- `AGENTS.md`
-- repo-local CodeCortex markers recognized by integration helpers
-
-If these are missing, run the repository activation flow.
+`AGENTS.md`, `.codecortex/`, and other markers are advisory and may exist before activation is complete.
 
 ### Check 3 — If running in OpenClaw
 
@@ -382,7 +381,7 @@ and adopt the repository-defined operating model.
 
 ## Current CLI
 
-The current CLI now exposes both repository-memory and deterministic-execution flows.
+The current CLI now exposes repository-memory commands plus the runtime boundary for supported mutations.
 
 ### Initialize repository storage
 
@@ -452,13 +451,15 @@ cortex benchmark symbol codecortex.graph_builder.build_graph --depth 1 --limit 1
 cortex benchmark impact codecortex/graph_builder.py --depth 2 --limit 16
 ```
 
-### Execution commands
+### Runtime commands
 
 ```bash
 cortex capabilities --path .
-cortex edit-file --path . --file config.json --content '{"timeout": 30}'
-cortex run-command --path . --command 'python3 -m unittest -q'
+cortex action --stdin
+cortex action --request-file request.json
 ```
+
+The legacy `edit-file` and `run-command` commands remain available, but the canonical machine-readable ingress for participating agents is `cortex action`.
 
 ## Expected Workflow
 
@@ -489,6 +490,12 @@ If operating through OpenClaw, also run:
 
 ```bash
 cortex capabilities --path .
+```
+
+For supported mutations, submit structured JSON through:
+
+```bash
+cortex action --stdin
 ```
 
 ### Ongoing workflow
@@ -537,7 +544,7 @@ In practice, OpenClaw should:
 2. determine the target repository path
 3. activate CodeCortex in that repository if needed
 4. run `cortex capabilities --path <repo>`
-5. follow the repository-defined operating model
+5. use `cortex action` as the runtime ingress for supported operations
 
 ## Output Files (`.codecortex/`)
 
@@ -552,10 +559,10 @@ Artifacts may include:
 - `constraints.json`
 - `decisions.jsonl`
 
-Future execution-related artifacts may include:
+Runtime artifacts include:
 - `logs/`
 - `locks/`
-- execution state files
+- `state.json`
 
 ## Git Policy
 
